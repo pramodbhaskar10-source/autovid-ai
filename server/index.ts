@@ -51,37 +51,33 @@ app.post("/api/autopilot", async (req, res) => {
   res.json({ job_id })
 
   try {
-  console.log("🚀 Starting job:", job_id)
+    console.log("🚀 Starting job:", job_id)
 
-  // 1. Generate script
-  const script = await generateScript(topic || "Motivation")
-  console.log("✅ Script ready")
+    const script = await generateScript(topic || "Motivation")
 
-  // 2. Send to worker
-  const workerRes = await axios.post(
-    "https://autovid-ai-6.onrender.com/create-video",
-    {
+    const workerRes = await axios.post(
+      "https://autovid-ai-6.onrender.com/create-video",
+      {
+        script,
+        job_id
+      }
+    )
+
+    jobs[job_id] = {
+      status: "completed",
       script,
-      job_id
+      video_url: workerRes.data.video_url
     }
-  )
 
-  console.log("🎬 Worker response:", workerRes.data)
+  } catch (e: any) {
+    console.error("🔥 ERROR:", e.message)
 
-  jobs[job_id] = {
-    status: "completed",
-    script,
-    video_url: workerRes.data.video_url
+    jobs[job_id] = {
+      status: "failed",
+      error: e.message
+    }
   }
-
-} catch (e: any) {
-  console.error("🔥 ERROR:", e.message)
-
-  jobs[job_id] = {
-    status: "failed",
-    error: e.message
-  }
-}
+})
 
 // ===== CHECK JOB =====
 app.get("/api/job/:id", (req, res) => {
