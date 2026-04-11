@@ -1,4 +1,4 @@
-const cleanScript = job.script
+const cleanScript = "Success starts in your mind. Stay focused and never give up!"
   .replace(/\*\*/g, "")
   .replace(/\n/g, " ")
   .substring(0, 120)
