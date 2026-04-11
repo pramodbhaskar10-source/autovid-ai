@@ -47,6 +47,29 @@ app.post("/", async (req, res) => {
       }
     )
 
+    // ✅ STATUS CHECK ROUTE (THIS FIXES YOUR ERROR)
+app.get("/status/:id", async (req, res) => {
+  try {
+    const id = req.params.id
+
+    const response = await axios.get(
+      `https://api.json2video.com/v2/movies/${id}`,
+      {
+        headers: {
+          "x-api-key": process.env.JSON2VIDEO_API_KEY
+        }
+      }
+    )
+
+    res.json(response.data)
+
+  } catch (err) {
+    res.status(500).json({
+      error: err.message
+    })
+  }
+})
+    
     // ✅ IMPORTANT RESPONSE (for frontend)
     res.json({
       success: true,
