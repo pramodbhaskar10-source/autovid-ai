@@ -23,7 +23,7 @@ async function generate() {
   document.getElementById("status").innerText = "⏳ Generating video..."
 
   try {
-    const res = await fetch("/api/autopilot", {
+    const res = await fetch("https://autovid-ai-5.onrender.com/api/autopilot", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -47,7 +47,7 @@ async function generate() {
     for (let i = 0; i < 10; i++) {
       await new Promise(r => setTimeout(r, 3000))
 
-      const statusRes = await fetch(`/status/${projectId}`)
+      const statusRes = await fetch(`https://autovid-ai-5.onrender.com/status/${projectId}`)
       const statusData = await statusRes.json()
 
       if (statusData.movie && statusData.movie.url) {
