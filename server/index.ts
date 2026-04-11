@@ -31,6 +31,11 @@ import { exec } from 'child_process'
 import ffmpegPath from 'ffmpeg-static'
 
 const app = express()
+
+app.get('/', (req, res) => {
+  res.send('Server is running 🚀')
+})
+  
 app.use(express.json())
 
 let jobs: any = {}
@@ -63,4 +68,9 @@ app.get('/api/job/:id', (req, res) => {
   }
 
   res.json(job)
+})
+const PORT = process.env.PORT || 3000
+
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`)
 })
