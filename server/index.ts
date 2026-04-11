@@ -7,65 +7,31 @@ app.use(express.json())
 
 const PORT = process.env.PORT || 10000
 
-// ===== OpenAI =====
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 })
 
-// ===== Storage =====
 let jobs: any = {}
 
-// ===== Root =====
+// ROOT
 app.get("/", (req, res) => {
-  res.send("🚀 Autovid Backend Running")
+  res.send("Backend running")
 })
 
-// ===== Generate Script =====
+// SCRIPT
 async function generateScript(topic: string) {
   const res = await openai.chat.completions.create({
     model: "gpt-4o-mini",
     messages: [
-      { role: "system", content: "You are a YouTube script writer" },
-      { role: "user", content: `Write a short engaging script about ${topic}` }
+      { role: "system", content: "You write viral short video scripts" },
+      { role: "user", content: `Write a short script about ${topic}` }
     ]
   })
 
   return res.choices[0].message.content
 }
 
-// ===== Generate Video (JSON2Video API) =====
-async function generateVideo(script: string) {
-  const response = await axios.post(
-    "https://api.json2video.com/v2/movies",
-    {
-      scenes: [
-        {
-          elements: [
-            {
-              type: "text",
-              text: script,
-              style: {
-                fontSize: 40,
-                color: "#ffffff",
-                textAlign: "center"
-              }
-            }
-          ]
-        }
-      ]
-    },
-    {
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": process.env.JSON2VIDEO_API_KEY
-      }
-    }
-  )
-
-  return response.data
-}
-
-// ===== AUTOPILOT =====
+// AUTOPILOT
 app.post("/api/autopilot", async (req, res) => {
   const { topic } = req.body
 
@@ -75,36 +41,30 @@ app.post("/api/autopilot", async (req, res) => {
   res.json({ job_id })
 
   try {
-    console.log("🚀 Job started:", job_id)
+    const script = await generateScript(topic)
 
-    const script = await generateScript(topic || "Motivation")
-    console.log("✅ Script ready")
-
-    const video = await generateVideo(script)
-    console.log("🎬 Video created")
+    await axios.post(process.env.WORKER_URL + "/generate", {
+      job_id,
+      script
+    })
 
     jobs[job_id] = {
-      status: "completed",
-      script,
-      video
+      status: "sent to worker"
     }
 
-  } catch (err: any) {
-    console.error("❌ ERROR:", err.message)
-
+  } catch (e: any) {
     jobs[job_id] = {
       status: "failed",
-      error: err.message
+      error: e.message
     }
   }
 })
 
-// ===== JOB STATUS =====
+// CHECK
 app.get("/api/job/:id", (req, res) => {
-  res.json(jobs[req.params.id] || { error: "Not found" })
+  res.json(jobs[req.params.id] || {})
 })
 
-// ===== START SERVER =====
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`)
+  console.log("Running on port " + PORT)
 })
