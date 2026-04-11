@@ -7,68 +7,33 @@ app.use(express.json())
 
 const PORT = process.env.PORT || 10000
 
-// ===== OpenAI =====
+// OpenAI
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 })
 
-// ===== JSON2VIDEO =====
-const JSON2VIDEO_API = "https://api.json2video.com/v2/movies"
-const JSON2VIDEO_KEY = process.env.JSON2VIDEO_API_KEY
-
-// ===== Storage =====
+// Memory storage
 let jobs = {}
 
-// ===== Root =====
+// Root route
 app.get("/", (req, res) => {
   res.send("🚀 Autovid Backend Running")
 })
 
-// ===== Generate Script =====
+// Generate script
 async function generateScript(topic) {
   const res = await openai.chat.completions.create({
     model: "gpt-4o-mini",
     messages: [
       { role: "system", content: "You are a YouTube script writer" },
-      { role: "user", content: `Write a short engaging video script about ${topic}` }
+      { role: "user", content: `Write a 1 minute YouTube script about ${topic}` }
     ]
   })
 
   return res.choices[0].message.content
 }
 
-// ===== Create Video (JSON2Video) =====
-async function createVideo(script) {
-  const response = await axios.post(
-    JSON2VIDEO_API,
-    {
-      scenes: [
-        {
-          elements: [
-            {
-              type: "text",
-              text: script.substring(0, 200),
-              style: {
-                fontSize: 48,
-                color: "#ffffff"
-              }
-            }
-          ]
-        }
-      ]
-    },
-    {
-      headers: {
-        "x-api-key": JSON2VIDEO_KEY,
-        "Content-Type": "application/json"
-      }
-    }
-  )
-
-  return response.data
-}
-
-// ===== AUTOPILOT =====
+// AUTOPILOT
 app.post("/api/autopilot", async (req, res) => {
   const { topic } = req.body
 
@@ -80,12 +45,16 @@ app.post("/api/autopilot", async (req, res) => {
   try {
     const script = await generateScript(topic || "Motivation")
 
-    const video = await createVideo(script)
+    // send to worker
+    const workerRes = await axios.post(
+      `${process.env.WORKER_URL}/create-video`,
+      { script }
+    )
 
     jobs[job_id] = {
       status: "completed",
       script,
-      video
+      video: workerRes.data
     }
 
   } catch (e) {
@@ -96,12 +65,12 @@ app.post("/api/autopilot", async (req, res) => {
   }
 })
 
-// ===== CHECK =====
+// check job
 app.get("/api/job/:id", (req, res) => {
   res.json(jobs[req.params.id] || { error: "Not found" })
 })
 
-// ===== START =====
+// start server
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`)
 })
