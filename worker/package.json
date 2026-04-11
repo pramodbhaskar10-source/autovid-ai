@@ -1,8 +1,7 @@
 {
+  "name": "worker",
   "type": "module",
   "dependencies": {
-    "express": "^4",
-    "openai": "^4",
     "axios": "^1"
   }
 }
