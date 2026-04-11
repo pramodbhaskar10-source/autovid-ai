@@ -20,7 +20,7 @@
 async function generate() {
   const topic = document.getElementById("topic").value
 
-  document.getElementById("status").innerText = "⏳ Generating..."
+  document.getElementById("status").innerText = "⏳ Generating video..."
 
   try {
     const res = await fetch("/api/autopilot", {
@@ -31,17 +31,16 @@ async function generate() {
       body: JSON.stringify({ topic })
     })
 
-    const data = await res.json()
-    console.log("BACKEND:", data)
+    const result = await res.json()
 
-    const projectId = data.project
+    const projectId = result.project   // ✅ FINAL FIX
 
     if (!projectId) {
-      document.getElementById("status").innerText = "❌ No Project ID"
+      document.getElementById("status").innerText = "❌ Project ID missing"
       return
     }
 
-    document.getElementById("status").innerText = "⏳ Rendering..."
+    document.getElementById("status").innerText = "⏳ Rendering video..."
 
     let videoUrl = null
 
@@ -51,14 +50,14 @@ async function generate() {
       const statusRes = await fetch(`/status/${projectId}`)
       const statusData = await statusRes.json()
 
-      if (statusData.movie?.url) {
+      if (statusData.movie && statusData.movie.url) {
         videoUrl = statusData.movie.url
         break
       }
     }
 
     if (videoUrl) {
-      document.getElementById("status").innerText = "✅ Done"
+      document.getElementById("status").innerText = "✅ Video Ready!"
 
       document.getElementById("result").innerHTML = `
         <video width="500" controls>
@@ -66,12 +65,12 @@ async function generate() {
         </video>
       `
     } else {
-      document.getElementById("status").innerText = "⏳ Still processing..."
+      document.getElementById("status").innerText =
+        "⏳ Still processing... refresh in 10 seconds"
     }
 
   } catch (err) {
-    console.error(err)
-    document.getElementById("status").innerText = "❌ Error"
+    document.getElementById("status").innerText = "❌ Error generating video"
   }
 }
 </script>
