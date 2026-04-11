@@ -29,6 +29,25 @@ app.post("/api/autopilot", async (req, res) => {
       body: JSON.stringify({ topic })
     })
 
+    app.get("/status/:id", async (req, res) => {
+  try {
+    const response = await fetch(
+      `https://api.json2video.com/v2/movies/${req.params.id}`,
+      {
+        headers: {
+          "x-api-key": process.env.JSON2VIDEO_API_KEY
+        }
+      }
+    )
+
+    const data = await response.json()
+    res.json(data)
+
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+    
     const data = await response.json()
 
     res.json({
