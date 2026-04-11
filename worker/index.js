@@ -2,18 +2,19 @@ import axios from "axios"
 import express from "express"
 
 const app = express()
+app.use(express.json())
 
+// Health check
 app.get("/", (req, res) => {
-  res.send("Worker is running ✅")
+  res.send("Worker running ✅")
 })
 
-app.listen(10000, () => {
-  console.log("Worker server running on port 10000")
-})
-
-const run = async () => {
+// MAIN WORKER API
+app.post("/", async (req, res) => {
   try {
-    const cleanScript = "Success starts in your mind. Stay focused and never give up!"
+    const topic = req.body.topic || "Success mindset"
+
+    const cleanScript = topic
       .replace(/\*\*/g, "")
       .replace(/\n/g, " ")
       .substring(0, 120)
@@ -42,14 +43,26 @@ const run = async () => {
       }
     )
 
-    console.log("✅ Video request sent:", response.data)
+    // ✅ IMPORTANT PART (you were missing this)
+    res.json({
+      success: true,
+      project: response.data.project
+    })
+
   } catch (err) {
-    console.error("❌ Error:", err.message)
+    console.error(err)
+    res.status(500).json({
+      success: false,
+      error: err.message
+    })
   }
-}
+})
 
-run()
-
+// Keep alive
 setInterval(() => {
   console.log("Worker alive...")
 }, 5000)
+
+app.listen(10000, () => {
+  console.log("Worker server running on port 10000")
+})
