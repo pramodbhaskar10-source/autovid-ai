@@ -1,21 +1,3 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <title>Autovid Pro</title>
-</head>
-<body style="font-family: Arial; text-align: center; padding: 50px;">
-
-<h1>🎬 Autovid Pro</h1>
-
-<input id="topic" placeholder="Enter topic..." style="padding:10px; width:300px;" />
-<br><br>
-
-<button onclick="generate()" style="padding:10px 20px;">Generate Video</button>
-
-<p id="status"></p>
-
-<div id="result"></div>
-
 <script>
 async function generate() {
   const topic = document.getElementById("topic").value
@@ -31,18 +13,41 @@ async function generate() {
   })
 
   const data = await res.json()
+  const projectId = data.data.project
 
-  console.log(data)
+  document.getElementById("status").innerText = "⏳ Rendering video..."
 
-  document.getElementById("status").innerText = "✅ Video requested!"
+  // 🔥 WAIT LOOP
+  let videoUrl = null
 
-  // 🔥 SHOW RESULT
-  document.getElementById("result").innerHTML = `
-    <p>🎥 Video Project Created</p>
-    <pre>${JSON.stringify(data, null, 2)}</pre>
-  `
+  for (let i = 0; i < 10; i++) {
+    await new Promise(r => setTimeout(r, 3000))
+
+    const statusRes = await fetch(
+      `https://autovid-ai-6.onrender.com/status/${projectId}`
+    )
+
+    const statusData = await statusRes.json()
+
+    console.log(statusData)
+
+    if (statusData.movie && statusData.movie.url) {
+      videoUrl = statusData.movie.url
+      break
+    }
+  }
+
+  if (videoUrl) {
+    document.getElementById("status").innerText = "✅ Video Ready!"
+
+    document.getElementById("result").innerHTML = `
+      <video width="500" controls>
+        <source src="${videoUrl}" type="video/mp4">
+      </video>
+    `
+  } else {
+    document.getElementById("status").innerText =
+      "⏳ Still processing... check again later"
+  }
 }
 </script>
-
-</body>
-</html>
