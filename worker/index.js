@@ -72,9 +72,9 @@ app.get("/status/:id", async (req, res) => {
     
     // ✅ IMPORTANT RESPONSE (for frontend)
     res.json({
-      success: true,
-      project: response.data.id
-    })
+  success: true,
+  project: response.data.data.id
+})
 
   } catch (err) {
     res.status(500).json({
