@@ -1,10 +1,21 @@
+console.log("ENV CHECK:", process.env.OPENAI_API_KEY ? "FOUND" : "MISSING")
 import OpenAI from "openai"
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-})
+let openai: any = null
+
+if (process.env.OPENAI_API_KEY) {
+  openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+  })
+} else {
+  console.log("⚠️ OpenAI API key missing")
+}
 
 async function generateScript(topic: string) {
+  if (!openai) {
+    return "OpenAI not configured"
+  }
+
   const res = await openai.chat.completions.create({
     model: "gpt-4o-mini",
     messages: [
