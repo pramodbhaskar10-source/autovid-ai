@@ -1,61 +1,56 @@
-import OpenAI from "openai"
+import express from "express"
 import axios from "axios"
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-})
+const app = express()
+app.use(express.json())
 
-async function generateScript(topic) {
-  const res = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [
-      { role: "system", content: "You are a YouTube script writer" },
-      { role: "user", content: `Write a short script about ${topic}` }
-    ]
-  })
+const PORT = process.env.PORT || 10000
 
-  return res.choices[0].message.content
-}
-
-async function generateVideo(script) {
-  const response = await axios.post(
-    "https://api.json2video.com/v2/movies",
-    {
-      scenes: [
-        {
-          elements: [
-            {
-              type: "text",
-              text: script
-            }
-          ]
-        }
-      ]
-    },
-    {
-      headers: {
-        "x-api-key": process.env.JSON2VIDEO_API_KEY
-      }
-    }
-  )
-
-  return response.data
-}
-
-// TEST RUN (worker execution)
-async function run() {
+// Create video using JSON2Video
+app.post("/create-video", async (req, res) => {
   try {
-    console.log("🚀 Worker started")
+    const { script } = req.body
 
-    const script = await generateScript("Success mindset")
-    console.log("✅ Script:", script.substring(0, 50))
+    const response = await axios.post(
+      "https://api.json2video.com/v2/movies",
+      {
+        scenes: [
+          {
+            elements: [
+              {
+                type: "text",
+                text: script.substring(0, 200),
+                style: {
+                  fontSize: 48,
+                  color: "#ffffff",
+                  background: "#000000"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": process.env.JSON2VIDEO_API_KEY
+        }
+      }
+    )
 
-    const video = await generateVideo(script)
-    console.log("🎬 Video created:", video)
+    res.json({
+      success: true,
+      video: response.data
+    })
 
   } catch (err) {
-    console.error("❌ Worker error:", err.message)
+    res.status(500).json({
+      error: err.message
+    })
   }
-}
+})
 
-run()
+// Start server
+app.listen(PORT, () => {
+  console.log(`🎬 Worker running on ${PORT}`)
+})
