@@ -1,4 +1,4 @@
-import { generateScript } from '../lib/openai.ts'
+import { generateScript } from '../lib/openai'
 import express from 'express'
 import { exec } from 'child_process'
 import ffmpegPath from 'ffmpeg-static'
