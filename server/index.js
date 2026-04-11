@@ -9,10 +9,11 @@ const app = express()
 app.use(express.json())
 
 // ✅ Serve frontend (index.html from root folder)
-app.use(express.static(path.join(__dirname, "..")))
+
+app.use(express.static("public"))
 
 app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "index.html"))
+  res.sendFile(path.resolve("public/index.html"))
 })
 
 // ✅ MAIN API (Frontend → Worker)
