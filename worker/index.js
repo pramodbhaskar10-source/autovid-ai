@@ -27,3 +27,6 @@ const response = await axios.post(
     }
   }
 )
+setInterval(() => {
+  console.log("Worker alive...")
+}, 5000)
