@@ -8,16 +8,19 @@
     "start": "node -r ts-node/register server/index.ts"
   },
   "dependencies": {
-    "next": "14",
-    "react": "^18",
-    "react-dom": "^18",
-    "express": "^4",
-    "ffmpeg-static": "^5",
-    "stripe": "^14",
-    "@supabase/supabase-js": "^2",
-    "openai": "^4",
-    "axios": "^1"
-  },
+  "next": "14",
+  "react": "^18",
+  "react-dom": "^18",
+  "express": "^4",
+  "ffmpeg-static": "^5",
+  "stripe": "^14",
+  "@supabase/supabase-js": "^2",
+  "openai": "^4",
+  "axios": "^1",
+
+  "gtts": "^0.2.1",
+  "fluent-ffmpeg": "^2.1.2"
+},
   "devDependencies": {
     "typescript": "^5",
     "ts-node": "^10",
