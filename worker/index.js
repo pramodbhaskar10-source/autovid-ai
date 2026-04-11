@@ -4,16 +4,15 @@ import cors from "cors"
 
 const app = express()
 
-// ✅ MIDDLEWARE (ORDER MATTERS)
 app.use(cors())
 app.use(express.json())
 
-// ✅ TEST ROUTE
+// health check
 app.get("/", (req, res) => {
-  res.send("Worker is running ✅")
+  res.send("Worker running ✅")
 })
 
-// ✅ MAIN WORKER API
+// CREATE VIDEO
 app.post("/", async (req, res) => {
   try {
     const topic = req.body.topic || "Success mindset"
@@ -47,49 +46,17 @@ app.post("/", async (req, res) => {
       }
     )
 
-    // ✅ STATUS CHECK ROUTE (THIS FIXES YOUR ERROR)
-app.get("/status/:id", async (req, res) => {
-  try {
-    const id = req.params.id
-
-    const response = await axios.get(
-      `https://api.json2video.com/v2/movies/${id}`,
-      {
-        headers: {
-          "x-api-key": process.env.JSON2VIDEO_API_KEY
-        }
-      }
-    )
-
-    res.json(response.data)
-
-  } catch (err) {
-    res.status(500).json({
-      error: err.message
-    })
-  }
-})
-    
-    // ✅ IMPORTANT RESPONSE (for frontend)
+    // ✅ RETURN ONLY PROJECT ID
     res.json({
-  success: true,
-  project: response.data.data.id
-})
+      project: response.data.project
+    })
 
   } catch (err) {
-    res.status(500).json({
-      success: false,
-      error: err.message
-    })
+    console.error(err.response?.data || err.message)
+    res.status(500).json({ error: err.message })
   }
 })
 
-// ✅ KEEP SERVER ALIVE
-setInterval(() => {
-  console.log("Worker alive...")
-}, 5000)
-
-// ✅ START SERVER
-app.listen(10000, () => {
-  console.log("Worker running on port 10000")
+app.listen(process.env.PORT || 10000, () => {
+  console.log("Worker running 🚀")
 })
