@@ -23,6 +23,34 @@ app.post("/create-video", async (req, res) => {
   const { script, job_id } = req.body
 
   try {
+    const videoPath = `video-${job_id}.mp4`
+
+    await new Promise((resolve, reject) => {
+      ffmpeg()
+        .input('color=c=black:s=1280x720:d=12')
+        .inputFormat('lavfi')
+        .outputOptions([
+          '-vf',
+          `drawtext=text='${script.substring(0, 100).replace(/:/g, "\\:")}':fontcolor=white:fontsize=24:x=10:y=H-th-10`,
+          '-c:v libx264',
+          '-pix_fmt yuv420p'
+        ])
+        .save(videoPath)
+        .on('end', resolve)
+        .on('error', reject)
+    })
+
+    res.json({
+      success: true,
+      video_url: `/video-${job_id}.mp4`
+    })
+
+  } catch (err) {
+    res.status(500).json({ error: "Video creation failed" })
+  }
+})
+
+  try {
     // 🎤 TEXT → AUDIO
     const speech = await openai.audio.speech.create({
       model: "gpt-4o-mini-tts",
