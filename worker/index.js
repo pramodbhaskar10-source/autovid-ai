@@ -1,5 +1,16 @@
 import axios from "axios"
-const cleanScript = "Success starts in your mind. Stay focused and never give up!"
+import express from "express"
+
+const app = express()
+
+app.get("/", (req, res) => {
+  res.send("Worker is running ✅")
+})
+
+app.listen(10000, () => {
+  console.log("Worker server running on port 10000")
+})
+  const cleanScript = "Success starts in your mind. Stay focused and never give up!"
   .replace(/\*\*/g, "")
   .replace(/\n/g, " ")
   .substring(0, 120)
