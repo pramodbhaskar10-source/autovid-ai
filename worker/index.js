@@ -7,12 +7,10 @@ const app = express()
 app.use(cors())
 app.use(express.json())
 
-// health check
 app.get("/", (req, res) => {
   res.send("Worker running ✅")
 })
 
-// CREATE VIDEO
 app.post("/", async (req, res) => {
   try {
     const topic = req.body.topic || "Success mindset"
@@ -46,7 +44,6 @@ app.post("/", async (req, res) => {
       }
     )
 
-    // ✅ RETURN ONLY PROJECT ID
     res.json({
       project: response.data.project
     })
