@@ -36,12 +36,13 @@ async function generate() {
     console.log("Backend response:", data)
 
     // ✅ FIX: correct path
-    const projectId = data.project
+    const projectId = data.project || data.data?.project
 
     if (!projectId) {
-      document.getElementById("status").innerText = "❌ Project ID missing"
-      return
-    }
+  document.getElementById("status").innerText = "❌ Project ID missing"
+  console.log("Full response:", data)
+  return
+}
 
     document.getElementById("status").innerText = "⏳ Rendering video..."
 
