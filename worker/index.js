@@ -23,26 +23,25 @@ async function createVideo() {
     const response = await axios.post(
       "https://api.json2video.com/v2/movies",
       {
-        scenes: [
-          {
-            elements: [
-              {
-                type: "text",
-                text: cleanScript,
-                style: "font-size:48px; color:#ffffff; background:#000000;",
-                duration: 6
-              }
-            ]
-          }
-        ]
-      },
-      {
-        headers: {
-          "x-api-key": process.env.JSON2VIDEO_API_KEY,
-          "Content-Type": "application/json"
+  resolution: "1080x1920",
+  scenes: [
+    {
+      duration: 6,
+      elements: [
+        {
+          type: "video",
+          src: "https://cdn.coverr.co/videos/coverr-working-on-laptop-5176/1080p.mp4"
+        },
+        {
+          type: "text",
+          text: cleanScript,
+          style: "font-size:60px; color:#ffffff; text-align:center;",
+          position: "center"
         }
-      }
-    )
+      ]
+    }
+  ]
+}
 
     console.log("✅ Video created:", response.data)
   } catch (error) {
