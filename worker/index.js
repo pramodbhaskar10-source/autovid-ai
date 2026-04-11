@@ -59,6 +59,8 @@ app.post("/create-video", async (req, res) => {
   }
 })
 
-app.listen(5000, () => {
-  console.log("🚀 Worker running on port 5000")
+const PORT = process.env.PORT || 10000
+
+app.listen(PORT, () => {
+  console.log(`🎬 Worker running on port ${PORT}`)
 })
