@@ -1,10 +1,14 @@
 import express from "express"
 import OpenAI from "openai"
+import axios from "axios"
 
 const app = express()
 app.use(express.json())
 
 const PORT = process.env.PORT || 3000
+
+// 🔥 CHANGE THIS AFTER WORKER DEPLOY
+const WORKER_URL = "https://your-worker-url.onrender.com"
 
 // ===== OpenAI Setup =====
 const openai = new OpenAI({
@@ -16,7 +20,7 @@ app.get("/", (req, res) => {
   res.send("🚀 Autovid Backend Running")
 })
 
-// ===== Storage =====
+// ===== In-memory storage =====
 let jobs: any = {}
 
 // ===== Generate Script =====
@@ -26,7 +30,7 @@ async function generateScript(topic: string) {
       model: "gpt-4o-mini",
       messages: [
         { role: "system", content: "You are a YouTube script writer" },
-        { role: "user", content: `Write a 1 minute YouTube script about ${topic}` }
+        { role: "user", content: `Write a YouTube video script about ${topic}` }
       ]
     })
 
@@ -47,16 +51,27 @@ app.post("/api/autopilot", async (req, res) => {
   res.json({ job_id })
 
   try {
-    console.log("Starting job:", job_id)
+    console.log("🚀 Starting job:", job_id)
 
+    // 1️⃣ Generate Script
     const script = await generateScript(topic || "Motivation")
 
+    // 2️⃣ Call Worker for Video
+    await axios.post(`${WORKER_URL}/create-video`, {
+      script,
+      job_id
+    })
+
+    // 3️⃣ Save Result
     jobs[job_id] = {
       status: "completed",
-      script
+      script,
+      video_url: `${WORKER_URL}/video-${job_id}.mp4`
     }
 
   } catch (e: any) {
+    console.error("🔥 ERROR:", e.message)
+
     jobs[job_id] = {
       status: "failed",
       error: e.message
