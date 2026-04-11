@@ -11,8 +11,7 @@ app.listen(10000, () => {
   console.log("Worker server running on port 10000")
 })
 
-// ✅ RUN VIDEO JOB PROPERLY INSIDE FUNCTION
-async function runJob() {
+const run = async () => {
   try {
     const cleanScript = "Success starts in your mind. Stay focused and never give up!"
       .replace(/\*\*/g, "")
@@ -43,16 +42,14 @@ async function runJob() {
       }
     )
 
-    console.log("Video created:", response.data)
+    console.log("✅ Video request sent:", response.data)
   } catch (err) {
-    console.error("Error creating video:", err.response?.data || err.message)
+    console.error("❌ Error:", err.message)
   }
 }
 
-// ✅ RUN EVERY 15 SECONDS (for testing)
-setInterval(runJob, 15000)
+run()
 
-// keep alive logs
 setInterval(() => {
   console.log("Worker alive...")
 }, 5000)
