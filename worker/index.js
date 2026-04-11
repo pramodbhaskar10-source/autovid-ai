@@ -49,6 +49,78 @@ app.post("/", async (req, res) => {
       project: response.data.project
     })
 
+    app.post("/", async (req, res) => {
+  try {
+    const topic = req.body.topic || "Success mindset"
+
+    const cleanScript = topic
+      .replace(/\*\*/g, "")
+      .replace(/\n/g, " ")
+      .substring(0, 120)
+
+    const response = await axios.post(
+      "https://api.json2video.com/v2/movies",
+      {
+        scenes: [
+          {
+            elements: [
+              {
+                type: "text",
+                text: cleanScript,
+                style: "headline",
+                duration: 6
+              }
+            ]
+          }
+        ]
+      },
+      {
+        headers: {
+          "x-api-key": process.env.JSON2VIDEO_API_KEY,
+          "Content-Type": "application/json"
+        }
+      }
+    )
+
+    res.json({
+      success: true,
+      project: response.data.project
+    })
+
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({
+      success: false,
+      error: err.message
+    })
+  }
+})
+
+
+// ✅ 👉 PASTE HERE (AFTER POST, BEFORE setInterval)
+
+app.get("/status/:id", async (req, res) => {
+  try {
+    const projectId = req.params.id
+
+    const response = await axios.get(
+      `https://api.json2video.com/v2/movies/${projectId}`,
+      {
+        headers: {
+          "x-api-key": process.env.JSON2VIDEO_API_KEY
+        }
+      }
+    )
+
+    res.json(response.data)
+
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({
+      error: err.message
+    })
+  }
+})
   } catch (err) {
     console.error(err)
     res.status(500).json({
