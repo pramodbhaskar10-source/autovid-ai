@@ -27,15 +27,25 @@ let jobs: any = {}
 
 // ===== Generate Script =====
 async function generateScript(topic: string) {
-  const res = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [
-      { role: "system", content: "You are a YouTube script writer" },
-      { role: "user", content: `Write a short engaging video script about ${topic}` }
-    ]
-  })
+  try {
+    if (!openai) {
+      throw new Error("OpenAI not configured")
+    }
 
-  return res.choices[0].message.content || "No script"
+    const res = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: "You are a YouTube script writer" },
+        { role: "user", content: `Write a 5 minute YouTube script about ${topic}` }
+      ]
+    })
+
+    return res.choices[0].message.content
+
+  } catch (err: any) {
+    console.error("🔥 OPENAI ERROR:", err.message)
+    throw new Error(err.message || "OpenAI failed")
+  }
 }
 
 // ===== Generate Video =====
@@ -97,14 +107,11 @@ app.post('/api/autopilot', async (req, res) => {
     }
 
   } catch (e: any) {
-    console.error("❌ ERROR:", e)
-
-    jobs[job_id] = {
-      status: 'failed',
-      error: e.message
-    }
+  jobs[job_id] = {
+    status: 'failed',
+    error: e.message
   }
-})
+}
 
 // ===== CHECK JOB =====
 app.get('/api/job/:id', (req, res) => {
