@@ -11,48 +11,48 @@ app.listen(10000, () => {
   console.log("Worker server running on port 10000")
 })
 
-// ✅ CLEAN SCRIPT
-const cleanScript = "Success starts in your mind. Stay focused and never give up!"
-  .replace(/\*\*/g, "")
-  .replace(/\n/g, " ")
-  .substring(0, 120)
-
-// ✅ FUNCTION (IMPORTANT FIX)
-async function createVideo() {
+// ✅ RUN VIDEO JOB PROPERLY INSIDE FUNCTION
+async function runJob() {
   try {
+    const cleanScript = "Success starts in your mind. Stay focused and never give up!"
+      .replace(/\*\*/g, "")
+      .replace(/\n/g, " ")
+      .substring(0, 120)
+
     const response = await axios.post(
       "https://api.json2video.com/v2/movies",
       {
-  resolution: "1080x1920",
-  scenes: [
-    {
-      duration: 6,
-      elements: [
-        {
-          type: "video",
-          src: "https://cdn.coverr.co/videos/coverr-working-on-laptop-5176/1080p.mp4"
-        },
-        {
-          type: "text",
-          text: cleanScript,
-          style: "font-size:60px; color:#ffffff; text-align:center;",
-          position: "center"
+        scenes: [
+          {
+            elements: [
+              {
+                type: "text",
+                text: cleanScript,
+                style: "headline",
+                duration: 6
+              }
+            ]
+          }
+        ]
+      },
+      {
+        headers: {
+          "x-api-key": process.env.JSON2VIDEO_API_KEY,
+          "Content-Type": "application/json"
         }
-      ]
-    }
-  ]
-}
+      }
+    )
 
-    console.log("✅ Video created:", response.data)
-  } catch (error) {
-    console.error("❌ Error:", error.response?.data || error.message)
+    console.log("Video created:", response.data)
+  } catch (err) {
+    console.error("Error creating video:", err.response?.data || err.message)
   }
 }
 
-// ✅ RUN EVERY 20 SECONDS (TEST)
-setInterval(createVideo, 20000)
+// ✅ RUN EVERY 15 SECONDS (for testing)
+setInterval(runJob, 15000)
 
-// KEEP ALIVE LOG
+// keep alive logs
 setInterval(() => {
   console.log("Worker alive...")
 }, 5000)
