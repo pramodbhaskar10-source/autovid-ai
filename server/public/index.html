@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Autovid Pro</title>
+</head>
+
+<body style="font-family: Arial; text-align: center; padding: 50px;">
+
+<h1>🎬 Autovid Pro</h1>
+
+<input id="topic" placeholder="Enter topic..." style="padding:10px; width:300px;" />
+<br><br>
+
+<button onclick="generate()" style="padding:10px 20px;">Generate Video</button>
+
+<p id="status"></p>
+<div id="result"></div>
+
+<script>
+async function generate() {
+  const topic = document.getElementById("topic").value
+
+  document.getElementById("status").innerText = "⏳ Generating video..."
+
+  try {
+    // STEP 1: Call backend
+    const res = await fetch("/api/autopilot", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ topic })
+    })
+
+    const data = await res.json()
+    console.log("Backend response:", data)
+
+    const projectId = data.data.project
+
+    document.getElementById("status").innerText = "⏳ Rendering video..."
+
+    let videoUrl = null
+
+    // STEP 2: Check status from worker
+    for (let i = 0; i < 10; i++) {
+      await new Promise(r => setTimeout(r, 3000))
+
+      const statusRes = await fetch(
+        `https://autovid-ai-6.onrender.com/status/${projectId}`
+      )
+
+      const statusData = await statusRes.json()
+      console.log("Status:", statusData)
+
+      if (statusData.movie && statusData.movie.url) {
+        videoUrl = statusData.movie.url
+        break
+      }
+    }
+
+    // STEP 3: Show video
+    if (videoUrl) {
+      document.getElementById("status").innerText = "✅ Video Ready!"
+
+      document.getElementById("result").innerHTML = `
+        <video width="500" controls>
+          <source src="${videoUrl}" type="video/mp4">
+        </video>
+      `
+    } else {
+      document.getElementById("status").innerText =
+        "⏳ Still processing... try again in a few seconds"
+    }
+
+  } catch (err) {
+    console.error(err)
+    document.getElementById("status").innerText = "❌ Error generating video"
+  }
+}
+</script>
+
+</body>
+</html>
