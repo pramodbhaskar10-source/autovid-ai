@@ -5,43 +5,67 @@ import axios from "axios"
 const app = express()
 app.use(express.json())
 
-const PORT = process.env.PORT || 3000
+const PORT = process.env.PORT || 10000
 
-// 🔥 CHANGE THIS AFTER WORKER DEPLOY
-const WORKER_URL = "https://your-worker-url.onrender.com"
-
-// ===== OpenAI Setup =====
+// ===== OpenAI =====
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 })
 
-// ===== Root Route =====
+// ===== Storage =====
+let jobs: any = {}
+
+// ===== Root =====
 app.get("/", (req, res) => {
   res.send("🚀 Autovid Backend Running")
 })
 
-// ===== In-memory storage =====
-let jobs: any = {}
-
 // ===== Generate Script =====
 async function generateScript(topic: string) {
-  try {
-    const res = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: "You are a YouTube script writer" },
-        { role: "user", content: `Write a YouTube video script about ${topic}` }
-      ]
-    })
+  const res = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [
+      { role: "system", content: "You are a YouTube script writer" },
+      { role: "user", content: `Write a short engaging script about ${topic}` }
+    ]
+  })
 
-    return res.choices[0].message.content || "No script generated"
-  } catch (err: any) {
-    console.error("OpenAI Error:", err.message)
-    throw new Error("Script generation failed")
-  }
+  return res.choices[0].message.content
 }
 
-// ===== AUTOPILOT API =====
+// ===== Generate Video (JSON2Video API) =====
+async function generateVideo(script: string) {
+  const response = await axios.post(
+    "https://api.json2video.com/v2/movies",
+    {
+      scenes: [
+        {
+          elements: [
+            {
+              type: "text",
+              text: script,
+              style: {
+                fontSize: 40,
+                color: "#ffffff",
+                textAlign: "center"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": process.env.JSON2VIDEO_API_KEY
+      }
+    }
+  )
+
+  return response.data
+}
+
+// ===== AUTOPILOT =====
 app.post("/api/autopilot", async (req, res) => {
   const { topic } = req.body
 
@@ -51,35 +75,31 @@ app.post("/api/autopilot", async (req, res) => {
   res.json({ job_id })
 
   try {
-    console.log("🚀 Starting job:", job_id)
+    console.log("🚀 Job started:", job_id)
 
     const script = await generateScript(topic || "Motivation")
+    console.log("✅ Script ready")
 
-    const workerRes = await axios.post(
-      "https://autovid-ai-6.onrender.com/create-video",
-      {
-        script,
-        job_id
-      }
-    )
+    const video = await generateVideo(script)
+    console.log("🎬 Video created")
 
     jobs[job_id] = {
       status: "completed",
       script,
-      video_url: workerRes.data.video_url
+      video
     }
 
-  } catch (e: any) {
-    console.error("🔥 ERROR:", e.message)
+  } catch (err: any) {
+    console.error("❌ ERROR:", err.message)
 
     jobs[job_id] = {
       status: "failed",
-      error: e.message
+      error: err.message
     }
   }
 })
 
-// ===== CHECK JOB =====
+// ===== JOB STATUS =====
 app.get("/api/job/:id", (req, res) => {
   res.json(jobs[req.params.id] || { error: "Not found" })
 })
