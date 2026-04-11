@@ -29,7 +29,7 @@ let jobs: any = {}
 async function generateScript(topic: string) {
   try {
     const res = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: "gpt-3.5-turbo",
       messages: [
         { role: "system", content: "You are a YouTube script writer" },
         { role: "user", content: `Write a 5 minute YouTube script about ${topic}` }
@@ -50,8 +50,9 @@ async function createVideo(script: string, job_id: string) {
   const videoPath = `video-${job_id}.mp4`
 
   // 🎤 TEXT → AUDIO
-  const mp3 = await openai.audio.speech.create({
-    model: "gpt-4o-mini-tts",
+  // TEMP FIX: skip TTS
+fs.writeFileSync(audioPath, "")
+    model: "gpt-3.5-turbo",
     voice: "alloy",
     input: script
   })
