@@ -1,7 +1,7 @@
 import express from "express" 
 import axios from "axios" 
 import cors from "cors"
-
+app.use(cors())
 
 const app = express()
 app.use(cors())
