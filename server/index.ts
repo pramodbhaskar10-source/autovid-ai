@@ -50,17 +50,10 @@ async function createVideo(script: string, job_id: string) {
   const videoPath = `video-${job_id}.mp4`
 
   // 🎤 TEXT → AUDIO
-  // TEMP FIX: skip TTS
+ // TEMP FIX: skip TTS completely
 fs.writeFileSync(audioPath, "")
-    model: "gpt-3.5-turbo",
-    voice: "alloy",
-    input: script
-  })
 
-  const buffer = Buffer.from(await mp3.arrayBuffer())
-  fs.writeFileSync(audioPath, buffer)
-
-  // 🎬 AUDIO → VIDEO
+   // 🎬 AUDIO → VIDEO
   await new Promise((resolve, reject) => {
     ffmpeg()
       .input(audioPath)
