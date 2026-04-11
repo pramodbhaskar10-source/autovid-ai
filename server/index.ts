@@ -28,10 +28,6 @@ let jobs: any = {}
 // ===== Generate Script =====
 async function generateScript(topic: string) {
   try {
-    if (!openai) {
-      throw new Error("OpenAI not configured")
-    }
-
     const res = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
@@ -53,7 +49,7 @@ async function createVideo(script: string, job_id: string) {
   const audioPath = `audio-${job_id}.mp3`
   const videoPath = `video-${job_id}.mp4`
 
-  // 🎤 TEXT → AUDIO (OpenAI TTS)
+  // 🎤 TEXT → AUDIO
   const mp3 = await openai.audio.speech.create({
     model: "gpt-4o-mini-tts",
     voice: "alloy",
@@ -107,11 +103,12 @@ app.post('/api/autopilot', async (req, res) => {
     }
 
   } catch (e: any) {
-  jobs[job_id] = {
-    status: 'failed',
-    error: e.message
+    jobs[job_id] = {
+      status: 'failed',
+      error: e.message
+    }
   }
-}
+}) // ✅ THIS WAS MISSING
 
 // ===== CHECK JOB =====
 app.get('/api/job/:id', (req, res) => {
@@ -130,8 +127,6 @@ app.get('/api/video/:id', (req, res) => {
 })
 
 // ===== START SERVER =====
-const PORT = process.env.PORT || 3000
-
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`)
 })
