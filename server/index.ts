@@ -1,7 +1,6 @@
 import express from 'express'
 import fs from 'fs'
 import path from 'path'
-import gTTS from 'gtts'
 import ffmpeg from 'fluent-ffmpeg'
 import ffmpegPath from 'ffmpeg-static'
 import OpenAI from 'openai'
@@ -44,16 +43,17 @@ async function createVideo(script: string, job_id: string) {
   const audioPath = `audio-${job_id}.mp3`
   const videoPath = `video-${job_id}.mp4`
 
-  // 1. TEXT → AUDIO
-  await new Promise((resolve, reject) => {
-    const gtts = new gTTS(script)
-    gtts.save(audioPath, (err: any) => {
-      if (err) reject(err)
-      else resolve(true)
-    })
+  // 🎤 TEXT → AUDIO (OpenAI TTS)
+  const mp3 = await openai.audio.speech.create({
+    model: "gpt-4o-mini-tts",
+    voice: "alloy",
+    input: script
   })
 
-  // 2. AUDIO → VIDEO (black screen video)
+  const buffer = Buffer.from(await mp3.arrayBuffer())
+  fs.writeFileSync(audioPath, buffer)
+
+  // 🎬 AUDIO → VIDEO
   await new Promise((resolve, reject) => {
     ffmpeg()
       .input(audioPath)
