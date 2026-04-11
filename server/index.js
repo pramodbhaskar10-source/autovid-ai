@@ -1,10 +1,14 @@
 import express from "express"
+import path from "path"
 
 const app = express()
-app.use(express.json())
 
+app.use(express.json())
+app.use(express.static("public"))
+
+// ✅ SERVE FRONTEND (THIS FIXES YOUR ISSUE)
 app.get("/", (req, res) => {
-  res.send("Backend running ✅")
+  res.sendFile(path.resolve("public/index.html"))
 })
 
 // CREATE VIDEO
