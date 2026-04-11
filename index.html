@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Autovid Pro</title>
+</head>
+<body>
+
+<h1>🎬 Autovid Pro</h1>
+
+<input id="topic" placeholder="Enter topic..." />
+<button onclick="generate()">Generate Video</button>
+
+<p id="status"></p>
+
+<script>
+async function generate() {
+  const topic = document.getElementById("topic").value
+
+  document.getElementById("status").innerText = "Generating..."
+
+  const res = await fetch("https://autovid-ai-5.onrender.com/api/autopilot", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ topic })
+  })
+
+  const data = await res.json()
+
+  console.log(data)
+
+  document.getElementById("status").innerText = "✅ Video request sent!"
+}
+</script>
+
+</body>
+</html>
