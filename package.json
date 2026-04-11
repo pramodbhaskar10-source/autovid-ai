@@ -1,13 +1,13 @@
 {
-  "name": "autovid-backend",
+  "name": "autovidpro",
   "version": "1.0.0",
   "type": "module",
-  "main": "server/index.js",
   "scripts": {
     "start": "node server/index.js"
   },
   "dependencies": {
-  "express": "^4",
-  "openai": "^4",
-  "axios": "^1"
+    "express": "^4",
+    "openai": "^4",
+    "axios": "^1"
+  }
 }
