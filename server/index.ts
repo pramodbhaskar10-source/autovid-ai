@@ -1,145 +1,119 @@
 import express from 'express'
-import OpenAI from "openai"
-import { exec } from 'child_process'
+import fs from 'fs'
+import path from 'path'
+import gTTS from 'gtts'
+import ffmpeg from 'fluent-ffmpeg'
 import ffmpegPath from 'ffmpeg-static'
-import fs from "fs"
-import path from "path"
-import gTTS from "gtts"
-import ffmpeg from "fluent-ffmpeg"
+import OpenAI from 'openai'
 
-// ✅ Setup ffmpeg
 ffmpeg.setFfmpegPath(ffmpegPath as string)
 
-// ✅ ENV CHECK
-console.log("ENV CHECK:", process.env.OPENAI_API_KEY ? "FOUND" : "MISSING")
+const app = express()
+app.use(express.json())
 
-// ✅ OpenAI Setup
-let openai: OpenAI | null = null
+const PORT = process.env.PORT || 3000
 
-if (process.env.OPENAI_API_KEY) {
-  openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-  })
-} else {
-  console.log("⚠️ OpenAI API key missing")
-}
+// ===== OpenAI Setup =====
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
+})
 
-// ✅ Generate Script
+// ===== Root Route =====
+app.get('/', (req, res) => {
+  res.send('🎬 Autovid AI Running')
+})
+
+// ===== Storage =====
+let jobs: any = {}
+
+// ===== Generate Script =====
 async function generateScript(topic: string) {
-  if (!openai) return "OpenAI not configured"
+  const res = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [
+      { role: "system", content: "You are a YouTube script writer" },
+      { role: "user", content: `Write a short engaging video script about ${topic}` }
+    ]
+  })
 
-  try {
-    const res = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: "You are a YouTube script writer" },
-        { role: "user", content: `Write a 5 minute YouTube script about ${topic}` }
-      ]
-    })
-
-    return res.choices?.[0]?.message?.content || "No script generated"
-  } catch (error) {
-    console.error("OpenAI Error:", error)
-    return "Error generating script"
-  }
+  return res.choices[0].message.content || "No script"
 }
 
-// ✅ Create Video (TTS + Black Screen)
+// ===== Generate Video =====
 async function createVideo(script: string, job_id: string) {
-  const audioPath = `audio_${job_id}.mp3`
-  const videoPath = `video_${job_id}.mp4`
+  const audioPath = `audio-${job_id}.mp3`
+  const videoPath = `video-${job_id}.mp4`
 
-  // 🎙️ Generate voice
+  // 1. TEXT → AUDIO
   await new Promise((resolve, reject) => {
-    const tts = new gTTS(script)
-    tts.save(audioPath, (err: any) => {
+    const gtts = new gTTS(script)
+    gtts.save(audioPath, (err: any) => {
       if (err) reject(err)
       else resolve(true)
     })
   })
 
-  // 🎬 Create video
-  return new Promise((resolve, reject) => {
+  // 2. AUDIO → VIDEO (black screen video)
+  await new Promise((resolve, reject) => {
     ffmpeg()
-      .input(`color=c=black:s=1280x720:d=60`)
-      .inputFormat("lavfi")
       .input(audioPath)
+      .inputOptions(['-f lavfi', '-i color=c=black:s=1280x720'])
       .outputOptions([
-        "-shortest",
-        "-c:v libx264",
-        "-c:a aac",
-        "-pix_fmt yuv420p"
+        '-shortest',
+        '-c:v libx264',
+        '-c:a aac',
+        '-pix_fmt yuv420p'
       ])
       .save(videoPath)
-      .on("end", () => resolve(videoPath))
-      .on("error", (err) => {
-        console.error("FFmpeg Error:", err)
-        reject(err)
-      })
+      .on('end', resolve)
+      .on('error', reject)
   })
+
+  return videoPath
 }
 
-// ✅ Express App
-const app = express()
-app.use(express.json())
-
-// ✅ Root Route
-app.get('/', (req, res) => {
-  res.send('Autovid AI Backend Running 🚀')
-})
-
-// ✅ Job Storage
-let jobs: any = {}
-
-// ✅ Autopilot API
+// ===== AUTOPILOT API =====
 app.post('/api/autopilot', async (req, res) => {
   const { topic } = req.body
-  const job_id = Date.now().toString()
 
+  const job_id = Date.now().toString()
   jobs[job_id] = { status: 'processing' }
+
   res.json({ job_id })
 
   try {
     const script = await generateScript(topic || "Motivation")
+
     const video = await createVideo(script, job_id)
 
     jobs[job_id] = {
       status: 'completed',
       script,
-      video
+      video_url: `/api/video/${job_id}`
     }
   } catch (e) {
-    console.error("ERROR:", e)
+    console.error(e)
     jobs[job_id] = { status: 'failed' }
   }
 })
 
-// ✅ Job Status
+// ===== CHECK JOB =====
 app.get('/api/job/:id', (req, res) => {
-  const job = jobs[req.params.id]
-
-  if (!job) {
-    return res.status(404).json({ error: "Job not found" })
-  }
-
-  res.json(job)
+  res.json(jobs[req.params.id] || { error: "Not found" })
 })
 
-// ✅ Download Video
-app.get('/api/video/:name', (req, res) => {
-  const filePath = path.resolve(req.params.name)
+// ===== DOWNLOAD VIDEO =====
+app.get('/api/video/:id', (req, res) => {
+  const file = path.join(process.cwd(), `video-${req.params.id}.mp4`)
 
-  if (!fs.existsSync(filePath)) {
+  if (!fs.existsSync(file)) {
     return res.status(404).send("Video not found")
   }
 
-  res.download(filePath)
+  res.sendFile(file)
 })
 
-// ✅ Start Server
-const PORT = process.env.PORT || 3000
-
+// ===== START SERVER =====
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`)
-  console.log("ENV KEY:", process.env.OPENAI_API_KEY ? "OK" : "MISSING")
 })
