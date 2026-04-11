@@ -1,13 +1,21 @@
 import express from "express"
+import path from "path"
+import { fileURLToPath } from "url"
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 const app = express()
 app.use(express.json())
 
+// ✅ Serve frontend (index.html from root folder)
+app.use(express.static(path.join(__dirname, "..")))
+
 app.get("/", (req, res) => {
-  res.send("Autovid Backend Running 🚀")
+  res.sendFile(path.join(__dirname, "..", "index.html"))
 })
 
-// MAIN API (this connects frontend → worker)
+// ✅ MAIN API (Frontend → Worker)
 app.post("/api/autopilot", async (req, res) => {
   try {
     const topic = req.body.topic || "Success mindset"
@@ -27,6 +35,7 @@ app.post("/api/autopilot", async (req, res) => {
       data
     })
   } catch (err) {
+    console.error(err)
     res.status(500).json({
       success: false,
       error: err.message
@@ -34,6 +43,7 @@ app.post("/api/autopilot", async (req, res) => {
   }
 })
 
+// ✅ Start server
 app.listen(process.env.PORT || 10000, () => {
   console.log("Server running 🚀")
 })
