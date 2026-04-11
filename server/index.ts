@@ -33,8 +33,8 @@ async function generateScript(topic: string) {
     return res.choices[0].message.content
 
   } catch (err: any) {
-    console.error("OPENAI ERROR:", err.message)
-    throw new Error("Script generation failed")
+    console.error("🔥 FULL OPENAI ERROR:", err)
+    throw new Error(err?.message || "Unknown OpenAI error")
   }
 }
 
