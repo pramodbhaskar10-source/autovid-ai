@@ -82,18 +82,27 @@ app.post('/api/autopilot', async (req, res) => {
   res.json({ job_id })
 
   try {
+    console.log("🎬 Starting job:", job_id)
+
     const script = await generateScript(topic || "Motivation")
+    console.log("✅ Script generated")
 
     const video = await createVideo(script, job_id)
+    console.log("✅ Video created:", video)
 
     jobs[job_id] = {
       status: 'completed',
       script,
       video_url: `/api/video/${job_id}`
     }
-  } catch (e) {
-    console.error(e)
-    jobs[job_id] = { status: 'failed' }
+
+  } catch (e: any) {
+    console.error("❌ ERROR:", e)
+
+    jobs[job_id] = {
+      status: 'failed',
+      error: e.message
+    }
   }
 })
 
