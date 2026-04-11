@@ -29,14 +29,14 @@ let jobs: any = {}
 async function generateScript(topic: string) {
   try {
     const res = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
+      model: "gpt-3.5-turbo", // ✅ safer model
       messages: [
         { role: "system", content: "You are a YouTube script writer" },
         { role: "user", content: `Write a 5 minute YouTube script about ${topic}` }
       ]
     })
 
-    return res.choices[0].message.content
+    return res.choices[0].message.content || "No script generated"
 
   } catch (err: any) {
     console.error("🔥 OPENAI ERROR:", err.message)
@@ -44,16 +44,14 @@ async function generateScript(topic: string) {
   }
 }
 
-// ===== Generate Video =====
+// ===== Generate Video (NO TTS TEMPORARY) =====
 async function createVideo(script: string, job_id: string) {
   const audioPath = `audio-${job_id}.mp3`
   const videoPath = `video-${job_id}.mp4`
 
-  // 🎤 TEXT → AUDIO
- // TEMP FIX: skip TTS completely
-fs.writeFileSync(audioPath, "")
+  // ✅ TEMP: empty audio (avoids TTS errors)
+  fs.writeFileSync(audioPath, "")
 
-   // 🎬 AUDIO → VIDEO
   await new Promise((resolve, reject) => {
     ffmpeg()
       .input(audioPath)
@@ -97,12 +95,14 @@ app.post('/api/autopilot', async (req, res) => {
     }
 
   } catch (e: any) {
+    console.error("❌ JOB ERROR:", e.message)
+
     jobs[job_id] = {
       status: 'failed',
       error: e.message
     }
   }
-}) // ✅ THIS WAS MISSING
+})
 
 // ===== CHECK JOB =====
 app.get('/api/job/:id', (req, res) => {
