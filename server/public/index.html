@@ -35,18 +35,24 @@ async function generate() {
     const data = await res.json()
     console.log("Backend response:", data)
 
-    const projectId = data.data.project
+    // ✅ FIX: correct path
+    const projectId = data.project
+
+    if (!projectId) {
+      document.getElementById("status").innerText = "❌ Project ID missing"
+      return
+    }
 
     document.getElementById("status").innerText = "⏳ Rendering video..."
 
     let videoUrl = null
 
-    // STEP 2: Check status from worker
+    // STEP 2: Check status
     for (let i = 0; i < 10; i++) {
       await new Promise(r => setTimeout(r, 3000))
 
       const statusRes = await fetch(
-        `https://autovid-ai-6.onrender.com/status/${projectId}`
+        `/status/${projectId}`   // ✅ FIX: use SAME backend (no CORS issue)
       )
 
       const statusData = await statusRes.json()
@@ -69,7 +75,7 @@ async function generate() {
       `
     } else {
       document.getElementById("status").innerText =
-        "⏳ Still processing... try again in a few seconds"
+        "⏳ Still processing... try again"
     }
 
   } catch (err) {
@@ -80,4 +86,4 @@ async function generate() {
 </script>
 
 </body>
-</html>
+</html> 
