@@ -102,7 +102,7 @@ app.get("/status/:id", async (req, res) => {
     const id = req.params.id
 
     const response = await axios.get(
-      `https://api.json2video.com/v2/movies/${id}`,
+      `https://api.json2video.com/v2/movies/${id}/status`,
       {
         headers: {
           "x-api-key": process.env.JSON2VIDEO_API_KEY
