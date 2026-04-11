@@ -23,7 +23,7 @@ let jobs: any = {}
 async function generateScript(topic: string) {
   try {
     const res = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: "gpt-5.4-mini",
       messages: [
         { role: "system", content: "You are a YouTube script writer" },
         { role: "user", content: `Write a 5 minute YouTube script about ${topic}` }
