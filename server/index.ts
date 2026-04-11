@@ -20,22 +20,23 @@ app.get("/", (req, res) => {
 let jobs: any = {}
 
 // ===== Generate Script =====
-async function generateScript(topic: string) {
-  try {
-    const res = await openai.chat.completions.create({
-      model: "gpt-5.4-mini",
-      messages: [
-        { role: "system", content: "You are a YouTube script writer" },
-        { role: "user", content: `Write a 5 minute YouTube script about ${topic}` }
-      ]
-    })
+async function createVideo(script: string, job_id: string) {
+  const videoPath = `video-${job_id}.mp4`
 
-    return res.choices[0].message.content
-
-  } catch (err: any) {
-    console.error("🔥 FULL OPENAI ERROR:", err)
-    throw new Error(err?.message || "Unknown OpenAI error")
-  }
+  return new Promise((resolve, reject) => {
+    ffmpeg()
+      .input('color=c=black:s=1280x720:d=12') // 12 sec video
+      .inputFormat('lavfi')
+      .outputOptions([
+        '-vf',
+        `drawtext=text='${script.substring(0, 100).replace(/:/g, "\\:")}':fontcolor=white:fontsize=24:x=10:y=H-th-10`,
+        '-c:v libx264',
+        '-pix_fmt yuv420p'
+      ])
+      .save(videoPath)
+      .on('end', () => resolve(videoPath))
+      .on('error', reject)
+  })
 }
 
 // ===== AUTOPILOT API =====
@@ -52,10 +53,13 @@ app.post("/api/autopilot", async (req, res) => {
 
     const script = await generateScript(topic || "Motivation")
 
-    jobs[job_id] = {
-      status: "completed",
-      script
-    }
+const video = await createVideo(script, job_id)
+
+jobs[job_id] = {
+  status: "completed",
+  script,
+  video_url: `/api/video/${job_id}`
+}
 
   } catch (e: any) {
     jobs[job_id] = {
@@ -66,15 +70,20 @@ app.post("/api/autopilot", async (req, res) => {
 })
 
 // ===== CHECK JOB =====
-app.get("/api/job/:id", (req, res) => {
-  const job = jobs[req.params.id]
+app.get('/api/job/:id', (req, res) => {
+  res.json(jobs[req.params.id] || { error: "Not found" })
+})
 
-  if (!job) {
-    return res.status(404).json({ error: "Job not found" })
+app.get('/api/video/:id', (req, res) => {
+  const file = path.join(process.cwd(), `video-${req.params.id}.mp4`)
+
+  if (!fs.existsSync(file)) {
+    return res.status(404).send("Video not found")
   }
 
-  res.json(job)
+  res.sendFile(file)
 })
+
 
 // ===== START SERVER =====
 app.listen(PORT, () => {
