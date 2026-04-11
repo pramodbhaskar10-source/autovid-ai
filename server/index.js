@@ -1,14 +1,20 @@
 import express from "express"
 import path from "path"
+import { fileURLToPath } from "url"
 
 const app = express()
 
-app.use(express.json())
-app.use(express.static("public"))
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
-// ✅ SERVE FRONTEND (THIS FIXES YOUR ISSUE)
+app.use(express.json())
+
+// ✅ FIXED STATIC PATH
+app.use(express.static(path.join(__dirname, "../public")))
+
+// ✅ FIXED ROOT ROUTE
 app.get("/", (req, res) => {
-  res.sendFile(path.resolve("public/index.html"))
+  res.sendFile(path.join(__dirname, "../public/index.html"))
 })
 
 // CREATE VIDEO
