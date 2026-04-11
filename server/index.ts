@@ -55,10 +55,12 @@ app.post('/api/autopilot', async (req, res) => {
   }
 })
 
-app.get('/api/status/:id', (req, res) => {
-  res.json(jobs[req.params.id] || {})
-})
+app.get('/api/job/:id', (req, res) => {
+  const job = jobs[req.params.id]
 
-app.listen(process.env.PORT || 3000, () => {
-  console.log('Server running')
+  if (!job) {
+    return res.status(404).json({ error: "Job not found" })
+  }
+
+  res.json(job)
 })
