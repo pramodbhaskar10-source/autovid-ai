@@ -1,3 +1,4 @@
+import axios from "axios"
 const cleanScript = "Success starts in your mind. Stay focused and never give up!"
   .replace(/\*\*/g, "")
   .replace(/\n/g, " ")
