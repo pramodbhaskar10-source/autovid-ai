@@ -7,7 +7,7 @@ app.get("/", (req, res) => {
   res.send("Backend running ✅")
 })
 
-// CALL WORKER
+// CREATE VIDEO
 app.post("/api/autopilot", async (req, res) => {
   try {
     const response = await fetch(process.env.WORKER_URL, {
@@ -20,7 +20,6 @@ app.post("/api/autopilot", async (req, res) => {
 
     const data = await response.json()
 
-    // ✅ DIRECT PASS
     res.json({
       project: data.project
     })
@@ -30,7 +29,7 @@ app.post("/api/autopilot", async (req, res) => {
   }
 })
 
-// STATUS CHECK
+// CHECK STATUS
 app.get("/status/:id", async (req, res) => {
   try {
     const response = await fetch(
