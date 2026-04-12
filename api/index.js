@@ -6,7 +6,12 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-// DEBUG ROUTE - Idhu add pannu
+// Health check
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok' });
+});
+
+// Debug route - IDHU DHAN MUKKIYAM
 app.get('/api/debug', (req, res) => {
   res.json({
     message: 'Debug build active',
@@ -17,10 +22,7 @@ app.get('/api/debug', (req, res) => {
   });
 });
 
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok' });
-});
-
+// Generate route
 app.post('/api/generate', async (req, res) => {
   console.log('=== /api/generate HIT ===');
   console.log('Request body:', req.body);
@@ -28,16 +30,12 @@ app.post('/api/generate', async (req, res) => {
   try {
     const { prompt } = req.body;
     if (!prompt) {
-      console.log('ERROR: No prompt');
       return res.status(400).json({ success: false, error: 'Prompt required' });
     }
 
-    console.log('Checking API key...');
     if (!process.env.JSON2VIDEO_API_KEY) {
-      console.log('ERROR: JSON2VIDEO_API_KEY missing');
       throw new Error('JSON2VIDEO_API_KEY missing in Vercel env');
     }
-    console.log('API key found, length:', process.env.JSON2VIDEO_API_KEY.length);
     
     console.log('Calling JSON2Video API NOW...');
     const response = await fetch('https://api.json2video.com/v2/movies', {
@@ -58,7 +56,6 @@ app.post('/api/generate', async (req, res) => {
       })
     });
 
-    console.log('JSON2Video status:', response.status);
     const data = await response.json();
     console.log('JSON2Video response:', JSON.stringify(data));
     
@@ -67,7 +64,6 @@ app.post('/api/generate', async (req, res) => {
     }
 
     const projectId = data.project || data.movie?.id || data.id;
-    console.log('Project ID found:', projectId);
 
     res.json({
       success: true,
@@ -87,4 +83,5 @@ app.post('/api/generate', async (req, res) => {
   }
 });
 
+// IDHU LAST LINE LA IRUKANUM - Vercel ku thevai
 module.exports = app;
