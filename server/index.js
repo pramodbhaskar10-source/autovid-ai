@@ -5,36 +5,31 @@ require('dotenv').config();
 
 const app = express();
 
-// 1. Vercel body limit fix - JSON2Video sends large payloads
+// Vercel body limit fix - JSON2Video sends large payloads
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// 2. CORS - so your frontend can call this API
 app.use(cors());
-
-// 3. Serve static files from 'public' folder
 app.use(express.static(path.join(__dirname, '../public')));
 
-// 4. Health check route
+// Health check route
 app.get('/api/health', (req, res) => {
   res.status(200).json({
     status: 'ok',
     message: 'Autovid AI is running on Vercel',
-    json2video:!!process.env.JSON2VIDEO_API_KEY,
-    openai:!!process.env.OPENAI_API_KEY
+    node: process.version,
+    json2video: !!process.env.JSON2VIDEO_API_KEY,
+    openai: !!process.env.OPENAI_API_KEY
   });
 });
 
-// 5. Example JSON2Video route - replace with your actual route
+// JSON2Video route example
 app.post('/api/generate', async (req, res) => {
   try {
     if (!process.env.JSON2VIDEO_API_KEY) {
       throw new Error('JSON2VIDEO_API_KEY missing in Vercel env');
     }
-
     // Your JSON2Video logic here
-    // const response = await fetch('https://api.json2video.com/v1/...', {...})
-
     res.status(200).json({ success: true, message: 'Video job started' });
   } catch (error) {
     console.error('Generate Error:', error);
@@ -42,12 +37,12 @@ app.post('/api/generate', async (req, res) => {
   }
 });
 
-// 6. Catch-all for SPA routing if you have frontend in /public
+// SPA fallback
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/index.html'));
 });
 
-// 7. Vercel error handler - MUST have this
+// Global error handler
 app.use((err, req, res, next) => {
   console.error('Unhandled Error:', err.stack);
   res.status(500).json({
@@ -57,5 +52,4 @@ app.use((err, req, res, next) => {
   });
 });
 
-// 8. CRITICAL: No app.listen() for Vercel. Export instead.
 module.exports = app;
