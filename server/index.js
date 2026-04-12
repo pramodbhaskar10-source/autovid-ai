@@ -1,64 +1,61 @@
-import express from "express"
-import path from "path"
-import { fileURLToPath } from "url"
+const express = require('express');
+const cors = require('cors');
+const path = require('path');
+require('dotenv').config();
 
-const app = express()
+const app = express();
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
+// 1. Vercel body limit fix - JSON2Video sends large payloads
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-app.use(express.json())
+// 2. CORS - so your frontend can call this API
+app.use(cors());
 
-// ✅ FIXED STATIC PATH
-app.use(express.static(path.join(__dirname, "../public")))
+// 3. Serve static files from 'public' folder
+app.use(express.static(path.join(__dirname, '../public')));
 
-// ✅ FIXED ROOT ROUTE
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "../public/index.html"))
-})
+// 4. Health check route
+app.get('/api/health', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    message: 'Autovid AI is running on Vercel',
+    json2video:!!process.env.JSON2VIDEO_API_KEY,
+    openai:!!process.env.OPENAI_API_KEY
+  });
+});
 
-// CREATE VIDEO
-app.post("/api/autopilot", async (req, res) => {
+// 5. Example JSON2Video route - replace with your actual route
+app.post('/api/generate', async (req, res) => {
   try {
-    const response = await fetch(process.env.WORKER_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(req.body)
-    })
+    if (!process.env.JSON2VIDEO_API_KEY) {
+      throw new Error('JSON2VIDEO_API_KEY missing in Vercel env');
+    }
 
-    const data = await response.json()
+    // Your JSON2Video logic here
+    // const response = await fetch('https://api.json2video.com/v1/...', {...})
 
-    res.json({
-      project: data.project
-    })
-
-  } catch (err) {
-    res.status(500).json({ error: err.message })
+    res.status(200).json({ success: true, message: 'Video job started' });
+  } catch (error) {
+    console.error('Generate Error:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
-})
+});
 
-// CHECK STATUS
-app.get("/status/:id", async (req, res) => {
-  try {
-    const response = await fetch(
-      `https://api.json2video.com/v2/movies/${req.params.id}`,
-      {
-        headers: {
-          "x-api-key": process.env.JSON2VIDEO_API_KEY
-        }
-      }
-    )
+// 6. Catch-all for SPA routing if you have frontend in /public
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/index.html'));
+});
 
-    const data = await response.json()
-    res.json(data)
+// 7. Vercel error handler - MUST have this
+app.use((err, req, res, next) => {
+  console.error('Unhandled Error:', err.stack);
+  res.status(500).json({
+    success: false,
+    error: 'Internal Server Error',
+    message: err.message
+  });
+});
 
-  } catch (err) {
-    res.status(500).json({ error: err.message })
-  }
-})
-
-app.listen(process.env.PORT || 10000, () => {
-  console.log("Server running 🚀")
-})
+// 8. CRITICAL: No app.listen() for Vercel. Export instead.
+module.exports = app;
