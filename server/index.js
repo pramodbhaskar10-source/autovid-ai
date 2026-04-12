@@ -1,46 +1,45 @@
 const express = require('express');
 const cors = require('cors');
-const path = require('path');
 require('dotenv').config();
 
 const app = express();
-
-// Vercel body limit fix - JSON2Video sends large payloads
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+app.use(express.json());
 app.use(cors());
-app.use(express.static(path.join(__dirname, '../public')));
 
-// Health check route
-app.get('/api/health', (req, res) => {
-  res.status(200).json({
-    status: 'ok',
-    message: 'Autovid AI is running on Vercel',
-    node: process.version,
-    json2video: !!process.env.JSON2VIDEO_API_KEY,
-    openai: !!process.env.OPENAI_API_KEY
+// DEBUG ROUTE - Idhu add pannu
+app.get('/api/debug', (req, res) => {
+  res.json({
+    message: 'Debug build active',
+    nodeVersion: process.version,
+    hasJson2VideoKey: !!process.env.JSON2VIDEO_API_KEY,
+    keyLength: process.env.JSON2VIDEO_API_KEY?.length || 0,
+    timestamp: new Date().toISOString()
   });
 });
 
-// JSON2Video route - IDHU DHAN MUKKIYAM
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok' });
+});
+
 app.post('/api/generate', async (req, res) => {
+  console.log('=== /api/generate HIT ===');
+  console.log('Request body:', req.body);
+  
   try {
     const { prompt } = req.body;
-    
     if (!prompt) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Prompt is required' 
-      });
+      console.log('ERROR: No prompt');
+      return res.status(400).json({ success: false, error: 'Prompt required' });
     }
 
+    console.log('Checking API key...');
     if (!process.env.JSON2VIDEO_API_KEY) {
+      console.log('ERROR: JSON2VIDEO_API_KEY missing');
       throw new Error('JSON2VIDEO_API_KEY missing in Vercel env');
     }
+    console.log('API key found, length:', process.env.JSON2VIDEO_API_KEY.length);
     
-    console.log('Calling JSON2Video API with prompt:', prompt);
-    
-    // IDHU DHAN MISSING AH IRUNDHUCHU - JSON2VIDEO KU ACTUAL CALL
+    console.log('Calling JSON2Video API NOW...');
     const response = await fetch('https://api.json2video.com/v2/movies', {
       method: 'POST',
       headers: {
@@ -49,59 +48,43 @@ app.post('/api/generate', async (req, res) => {
       },
       body: JSON.stringify({
         resolution: 'full-hd',
-        quality: 'high',
-        scenes: [
-          {
-            comment: 'Main scene',
-            duration: 5,
-            elements: [
-              {
-                type: 'text',
-                text: prompt,
-                duration: 5,
-                style: '001',
-                position: 'center-center'
-              }
-            ]
-          }
-        ]
+        scenes: [{ 
+          elements: [{ 
+            type: 'text', 
+            text: prompt, 
+            duration: 5 
+          }] 
+        }]
       })
     });
 
+    console.log('JSON2Video status:', response.status);
     const data = await response.json();
-    console.log('JSON2Video response:', data);
+    console.log('JSON2Video response:', JSON.stringify(data));
     
     if (!response.ok) {
-      throw new Error(data.message || data.error || 'JSON2Video API failed');
+      throw new Error(data.message || 'JSON2Video API failed');
     }
 
-    // IDHU DHAN NEENGA VENUMNUTTA PROJECT_ID
+    const projectId = data.project || data.movie?.id || data.id;
+    console.log('Project ID found:', projectId);
+
     res.json({
       success: true,
       message: 'Video job started',
-      project_id: data.project || data.movie?.id || data.id,
-      status: data.status || data.movie?.status
+      project_id: projectId,
+      status: data.status || 'pending',
+      debug: 'New code is running'
     });
     
   } catch (error) {
-    console.error('Generate Error:', error);
-    res.status(500).json({ success: false, error: error.message });
+    console.error('GENERATE ERROR:', error.message);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message,
+      debug: 'New code is running but failed'
+    });
   }
-});
-
-// SPA fallback
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../public/index.html'));
-});
-
-// Global error handler
-app.use((err, req, res, next) => {
-  console.error('Unhandled Error:', err.stack);
-  res.status(500).json({
-    success: false,
-    error: 'Internal Server Error',
-    message: err.message
-  });
 });
 
 module.exports = app;
