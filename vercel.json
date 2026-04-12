@@ -11,5 +11,10 @@
       "src": "/(.*)",
       "dest": "server/index.js"
     }
-  ]
+  ],
+  "functions": {
+    "server/index.js": {
+      "runtime": "nodejs24.x"
+    }
+  }
 }
