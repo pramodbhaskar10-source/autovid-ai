@@ -10,7 +10,6 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(cors());
 app.use(express.static(path.join(__dirname, '../public')));
 
-// Health check - already working
 app.get('/api/health', (req, res) => {
   res.status(200).json({
     status: 'ok',
@@ -21,7 +20,7 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// UPDATED: Real JSON2Video call
+// UPDATED: Real JSON2Video call + Debug logs
 app.post('/api/generate', async (req, res) => {
   try {
     const { prompt } = req.body;
@@ -30,10 +29,11 @@ app.post('/api/generate', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Prompt is required' });
     }
     if (!process.env.JSON2VIDEO_API_KEY) {
-      throw new Error('JSON2VIDEO_API_KEY missing in Vercel env');
+      return res.status(500).json({ success: false, error: 'JSON2VIDEO_API_KEY missing in Vercel env' });
     }
 
-    // JSON2Video API call - Basic template
+    console.log('Calling JSON2Video...');
+
     const j2vResponse = await fetch('https://api.json2video.com/v2/movies', {
       method: 'POST',
       headers: {
@@ -45,31 +45,29 @@ app.post('/api/generate', async (req, res) => {
         quality: 'high',
         scenes: [
           {
-            comment: 'Main scene',
-            elements: [
-              {
-                type: 'text',
-                text: prompt,
-                duration: 5,
-                style: '001'
-              }
-            ]
+            elements: [{ type: 'text', text: prompt, duration: 5 }]
           }
         ]
       })
     });
 
     const data = await j2vResponse.json();
+    console.log('JSON2Video Response:', data);
 
     if (!j2vResponse.ok) {
-      throw new Error(data.message || 'JSON2Video API error');
+      return res.status(j2vResponse.status).json({ 
+        success: false, 
+        error: 'JSON2Video API error',
+        details: data 
+      });
     }
 
     res.status(200).json({ 
       success: true, 
       message: 'Video job started',
       project_id: data.project,
-      status_url: `https://api.json2video.com/v2/movies?project=${data.project}`
+      status: data.status,
+      raw_response: data
     });
 
   } catch (error) {
@@ -78,7 +76,6 @@ app.post('/api/generate', async (req, res) => {
   }
 });
 
-// Check video status route
 app.get('/api/status/:projectId', async (req, res) => {
   try {
     const { projectId } = req.params;
@@ -94,11 +91,6 @@ app.get('/api/status/:projectId', async (req, res) => {
 
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/index.html'));
-});
-
-app.use((err, req, res, next) => {
-  console.error('Unhandled Error:', err.stack);
-  res.status(500).json({ success: false, error: 'Internal Server Error', message: err.message });
 });
 
 module.exports = app;
