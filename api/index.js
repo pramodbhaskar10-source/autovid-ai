@@ -33,7 +33,7 @@ app.post('/api/generate', async (req, res) => {
       });
     }
 
-    // FIXED: Voice is an element, not a scene property
+    // FIXED: Voice element with duration -1, no text element
     const response = await fetch('https://api.json2video.com/v2/movies', {
       method: 'POST',
       headers: {
@@ -50,13 +50,8 @@ app.post('/api/generate', async (req, res) => {
                 type: "voice",
                 model: "azure",
                 text: prompt,
-                voice: "en-IN-NeerjaNeural"
-              },
-              {
-                type: "text",
-                text: prompt,
-                style: "001",
-                duration: 5
+                voice: "en-IN-NeerjaNeural",
+                duration: -1  // THIS IS KEY - Auto duration
               }
             ]
           }
