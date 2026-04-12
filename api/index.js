@@ -63,4 +63,16 @@ app.get('/api/status/:projectId', async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 });
+
+app.use(express.json());
+app.use(cors());
+
+app.get('/api/debug', (req, res) => {... });
+
+app.post('/api/generate', async (req, res) => {... });
+
+// IDHU PUDHU ROUTE - IDHA ADD PANNU
+app.get('/api/status/:projectId', async (req, res) => {
+  // status check code
+});
 module.exports = app; // IDHU MUKKIYAM
