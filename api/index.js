@@ -41,9 +41,27 @@ app.post('/api/generate', async (req, res) => {
 app.get('/api/status/:projectId', async (req, res) => {
   try {
     const { projectId } = req.params;
+    
     const response = await fetch(`https://api.json2video.com/v2/movies/${projectId}`, {
       headers: { 'x-api-key': process.env.JSON2VIDEO_API_KEY }
     });
+    
+    const data = await response.json();
+    
+    // DEBUG: JSON2Video full response ah return pannu
+    return res.json({
+      success: true,
+      debug_full_response: data,
+      message: 'Check debug_full_response to see actual structure'
+    });
+    
+  } catch (error) {
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
     const data = await response.json();
     
     if (data.status === 'done') {
