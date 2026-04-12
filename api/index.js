@@ -67,12 +67,67 @@ app.get('/api/status/:projectId', async (req, res) => {
 app.use(express.json());
 app.use(cors());
 
-app.get('/api/debug', (req, res) => {... });
+app.get('/api/debug', (req, res) => {
+  res.json({ 
+    message: 'API Working',
+    timestamp: new Date().toISOString()
+  });
+});
 
-app.post('/api/generate', async (req, res) => {... });
+app.post('/api/generate', async (req, res) => {
+  try {
+    const { prompt } = req.body;
+    
+    const response = await fetch('https://api.json2video.com/v2/movies', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.JSON2VIDEO_API_KEY
+      },
+      body: JSON.stringify({
+        resolution: "instagram-story",
+        scenes: [{ comment: prompt }]
+      })
+    });
+    
+    const data = await response.json();
+    res.json({ success: true, project_id: data.project });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
 
-// IDHU PUDHU ROUTE - IDHA ADD PANNU
 app.get('/api/status/:projectId', async (req, res) => {
-  // status check code
+  try {
+    const { projectId } = req.params;
+    
+    const response = await fetch(`https://api.json2video.com/v2/movies/${projectId}`, {
+      headers: { 'x-api-key': process.env.JSON2VIDEO_API_KEY }
+    });
+    
+    const data = await response.json();
+    
+    if (data.movie && data.movie.status === 'done') {
+      res.json({
+        success: true,
+        status: 'done',
+        video_url: data.movie.url
+      });
+    } else if (data.movie) {
+      res.json({
+        success: true,
+        status: data.movie.status,
+        message: 'Video innum render aagudhu'
+      });
+    } else {
+      res.json({
+        success: false,
+        status: 'error',
+        raw: data
+      });
+    }
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
 });
 module.exports = app; // IDHU MUKKIYAM
