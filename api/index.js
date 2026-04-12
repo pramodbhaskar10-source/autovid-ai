@@ -1,4 +1,3 @@
-// Fix for Vercel: fetch is not available in Node < 18
 const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 const express = require('express');
 const cors = require('cors');
@@ -7,7 +6,6 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-// Health check endpoint
 app.get('/api/debug', (req, res) => {
   res.json({
     message: 'AutoVid AI API Working',
@@ -17,7 +15,6 @@ app.get('/api/debug', (req, res) => {
   });
 });
 
-// Generate video endpoint
 app.post('/api/generate', async (req, res) => {
   try {
     const { prompt } = req.body;
@@ -36,6 +33,7 @@ app.post('/api/generate', async (req, res) => {
       });
     }
 
+    // FIXED: Voice is an element, not a scene property
     const response = await fetch('https://api.json2video.com/v2/movies', {
       method: 'POST',
       headers: {
@@ -47,10 +45,20 @@ app.post('/api/generate', async (req, res) => {
         scenes: [
           {
             comment: prompt,
-            voice: {
-              model: "en-IN-NeerjaNeural",
-              text: prompt
-            }
+            elements: [
+              {
+                type: "voice",
+                model: "azure",
+                text: prompt,
+                voice: "en-IN-NeerjaNeural"
+              },
+              {
+                type: "text",
+                text: prompt,
+                style: "001",
+                duration: 5
+              }
+            ]
           }
         ]
       })
@@ -81,7 +89,6 @@ app.post('/api/generate', async (req, res) => {
   }
 });
 
-// Check video status endpoint - Tries 3 different JSON2Video endpoints
 app.get('/api/status/:projectId', async (req, res) => {
   try {
     const { projectId } = req.params;
@@ -106,7 +113,7 @@ app.get('/api/status/:projectId', async (req, res) => {
     });
     let data = await response.json();
 
-    // Try 2: /v2/movies?project=ID if first failed
+    // Try 2: /v2/movies?project=ID
     if (!data.success ||!data.movies || data.movies.length === 0) {
       response = await fetch(`https://api.json2video.com/v2/movies?project=${projectId}`, {
         headers: { 'x-api-key': process.env.JSON2VIDEO_API_KEY }
@@ -114,21 +121,19 @@ app.get('/api/status/:projectId', async (req, res) => {
       data = await response.json();
     }
 
-    // Try 3: /v2/movies/ID if both failed
+    // Try 3: /v2/movies/ID
     if (!data.success || (!data.movies &&!data.movie)) {
       response = await fetch(`https://api.json2video.com/v2/movies/${projectId}`, {
         headers: { 'x-api-key': process.env.JSON2VIDEO_API_KEY }
       });
       data = await response.json();
 
-      // Handle single movie response format
       if (data.success && data.movie) {
         data.movies = [data.movie];
       }
     }
 
-    // Final check and response
-    if (data.success && data.movies && data.movies.length > 0) {
+    if (data.success && data.movies.length > 0) {
       const movie = data.movies[0];
 
       if (movie.status === 'done' || movie.status === 'finished') {
