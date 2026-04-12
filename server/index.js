@@ -1,96 +1,124 @@
 const express = require('express');
 const cors = require('cors');
-const path = require('path');
-require('dotenv').config();
-
 const app = express();
 
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+// Middleware
 app.use(cors());
-app.use(express.static(path.join(__dirname, '../public')));
+app.use(express.json());
 
+// Health check route
 app.get('/api/health', (req, res) => {
-  res.status(200).json({
-    status: 'ok',
-    message: 'Autovid AI is running on Vercel',
-    node: process.version,
-    json2video: !!process.env.JSON2VIDEO_API_KEY,
-    openai: !!process.env.OPENAI_API_KEY
-  });
+  res.json({ status: 'ok', message: 'Server is running' });
 });
 
-// UPDATED: Real JSON2Video call + Debug logs
+// Main video generation route - JSON2Video ku call pogum
 app.post('/api/generate', async (req, res) => {
   try {
     const { prompt } = req.body;
-
+    
+    // Prompt validation
     if (!prompt) {
-      return res.status(400).json({ success: false, error: 'Prompt is required' });
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Prompt is required' 
+      });
     }
+
+    // API key check
     if (!process.env.JSON2VIDEO_API_KEY) {
-      return res.status(500).json({ success: false, error: 'JSON2VIDEO_API_KEY missing in Vercel env' });
+      console.error('JSON2VIDEO_API_KEY not found in environment variables');
+      return res.status(500).json({ 
+        success: false, 
+        error: 'Server configuration error: API key missing' 
+      });
     }
-
-    console.log('Calling JSON2Video...');
-
-    const j2vResponse = await fetch('https://api.json2video.com/v2/movies', {
+    
+    console.log('Calling JSON2Video API with prompt:', prompt);
+    
+    // Call JSON2Video API
+    const response = await fetch('https://api.json2video.com/v2/movies', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': process.env.JSON2VIDEO_API_KEY
+        'x-api-key': process.env.JSON2VIDEO_API_KEY,
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
         resolution: 'full-hd',
         quality: 'high',
         scenes: [
           {
-            elements: [{ type: 'text', text: prompt, duration: 5 }]
+            comment: 'Main scene',
+            duration: 5,
+            elements: [
+              {
+                type: 'text',
+                text: prompt,
+                duration: 5,
+                style: '001',
+                position: 'center-center'
+              }
+            ]
           }
         ]
       })
     });
 
-    const data = await j2vResponse.json();
-    console.log('JSON2Video Response:', data);
-
-    if (!j2vResponse.ok) {
-      return res.status(j2vResponse.status).json({ 
-        success: false, 
-        error: 'JSON2Video API error',
-        details: data 
-      });
+    const data = await response.json();
+    console.log('JSON2Video response:', data);
+    
+    // Check if JSON2Video returned error
+    if (!response.ok) {
+      throw new Error(data.message || data.error || 'JSON2Video API failed');
     }
 
-    res.status(200).json({ 
-      success: true, 
+    // Success response with project_id
+    res.json({
+      success: true,
       message: 'Video job started',
       project_id: data.project,
-      status: data.status,
-      raw_response: data
+      status: data.status
     });
-
+    
   } catch (error) {
-    console.error('Generate Error:', error);
-    res.status(500).json({ success: false, error: error.message });
+    console.error('Error in /api/generate:', error.message);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
   }
 });
 
+// Get video status route - Optional, video ready aana check panna
 app.get('/api/status/:projectId', async (req, res) => {
   try {
     const { projectId } = req.params;
+    
     const response = await fetch(`https://api.json2video.com/v2/movies?project=${projectId}`, {
-      headers: { 'x-api-key': process.env.JSON2VIDEO_API_KEY }
+      headers: {
+        'x-api-key': process.env.JSON2VIDEO_API_KEY
+      }
     });
+
     const data = await response.json();
-    res.status(200).json(data);
+    
+    if (!response.ok) {
+      throw new Error(data.message || 'Failed to get status');
+    }
+
+    res.json({
+      success: true,
+      status: data.movie.status,
+      url: data.movie.url || null
+    });
+    
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    console.error('Error in /api/status:', error.message);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
   }
 });
 
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../public/index.html'));
-});
-
+// Export for Vercel
 module.exports = app;
