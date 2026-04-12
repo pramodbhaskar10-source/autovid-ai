@@ -38,5 +38,29 @@ app.post('/api/generate', async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 });
-
+app.get('/api/status/:projectId', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const response = await fetch(`https://api.json2video.com/v2/movies/${projectId}`, {
+      headers: { 'x-api-key': process.env.JSON2VIDEO_API_KEY }
+    });
+    const data = await response.json();
+    
+    if (data.status === 'done') {
+      res.json({
+        success: true,
+        status: 'done',
+        video_url: data.movie.url
+      });
+    } else {
+      res.json({
+        success: true,
+        status: data.status,
+        message: 'Video innum render aagudhu'
+      });
+    }
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
 module.exports = app; // IDHU MUKKIYAM
