@@ -121,10 +121,10 @@ async function createVideo(scenes, audioPath, outputPath, brandName) {
     filter += videoPaths.map((_, i) => `[v${i}]`).join('') + `concat=n=${videoPaths.length}:v=1:a=0[outv];`;
 
     // Add captions and watermark
-    const captionText = scenes.map(s => s.narration).join(' ');
-    filter += `[outv]drawtext=text='${brandName}':fontcolor=white:fontsize=40:x=w-tw-50:y=50:shadowcolor=black:shadowx=2:shadowy=2;`;
-    filter += `drawtext=text='${captionText.replace(/'/g, "\\'")}':fontcolor=white:fontsize=60:x=(w-text_w)/2:y=h-200:borderw=3:bordercolor=black[out]`;
-
+const captionText = scenes.map(s => s.narration).join(' ');
+filter += `[0:v]drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:text='${brandName}':fontcolor=white:fontsize=40:x=w-tw-50:y=50:shadowcolor=black:shadowx=2:shadowy=2;`;
+filter += `drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:text='${captionText.replace(/'/g, "\\'")}':fontcolor=white:fontsize=60:x=(w-text_w)/2:y=h-200:borderw=3:bordercolor=black[out]`;
+    
     command
      .complexFilter(filter)
      .outputOptions([
