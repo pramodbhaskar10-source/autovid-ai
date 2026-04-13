@@ -1,261 +1,264 @@
 const express = require('express');
 const cors = require('cors');
 const ffmpeg = require('fluent-ffmpeg');
-const fs = require('fs');
+const fs = require('fs').promises;
 const path = require('path');
 const axios = require('axios');
-const OpenAI = require('openai');
+const { OpenAI } = require('openai');
 const cloudinary = require('cloudinary').v2;
 
 const app = express();
 app.use(cors());
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json());
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const PEXELS_API_KEY = process.env.PEXELS_API_KEY;
 
-// Cloudinary config
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
-const tmpDir = './tmp';
-if (!fs.existsSync(tmpDir)){
-  fs.mkdirSync(tmpDir, { recursive: true });
-}
+// Job storage - memory la save pannuvom
+const jobs = new Map();
 
-app.get('/', (req, res) => {
-  res.json({ status: 'AutoVid AI Running!', version: '3.0 - Cloudinary + Text' });
+// Create temp directory
+const ensureTempDir = async () => {
+  const tempDir = path.join(__dirname, 'tmp');
+  try {
+    await fs.access(tempDir);
+  } catch {
+    await fs.mkdir(tempDir, { recursive: true });
+  }
+  return tempDir;
+};
+
+// Health check
+app.get('/health', (req, res) => {
+  res.json({ status: 'OK', message: 'AutoVid AI is running!' });
 });
 
+// STEP 1: Start job - 1 second la response varum!
 app.post('/api/generate', async (req, res) => {
-  const startTime = Date.now();
-  let tempVideoPath = '';
-  let audioPath = '';
-  let outputPath = '';
-  let textFilePath = '';
-
   try {
     const { topic, duration, language, voiceChoice, brandName } = req.body;
 
-    if (!topic ||!duration ||!language ||!voiceChoice ||!brandName) {
-      return res.status(400).json({ error: 'Missing required fields' });
+    if (!topic) {
+      return res.status(400).json({ success: false, error: 'Topic is required' });
     }
 
-    console.log(`[1/6] Generating: ${topic} | ${duration} | ${language}`);
+    const jobId = `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-    const timestamp = Date.now();
-    outputPath = path.join(tmpDir, `output_${timestamp}.mp4`);
-    audioPath = path.join(tmpDir, `audio_${timestamp}.mp3`);
-    tempVideoPath = path.join(tmpDir, `temp_video_${timestamp}.mp4`);
-    textFilePath = path.join(tmpDir, `text_${timestamp}.txt`);
-
-    // 1. Generate Script
-    const scriptPrompt = `Create a ${duration} ${language} motivational video script about "${topic}".
-    Split into exactly 4 scenes. Each scene needs:
-    1. narration: 1-2 short sentences to speak
-    2. visual: 2-3 keywords like "nature", "city", "person working"
-    3. caption: 3-5 words for on-screen text
-    Return ONLY JSON: {"scenes": [{"narration": "...", "visual": "...", "caption": "..."}]}`;
-
-    const scriptResponse = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [{ role: "user", content: scriptPrompt }],
-      response_format: { type: "json_object" },
-      temperature: 0.7
+    // Job create pannu
+    jobs.set(jobId, {
+      id: jobId,
+      status: 'queued',
+      progress: 0,
+      message: 'Job queued',
+      videoUrl: null,
+      error: null,
+      createdAt: new Date().toISOString()
     });
 
-    const scriptData = JSON.parse(scriptResponse.choices[0].message.content);
-    const scenes = scriptData.scenes;
+    console.log(`[${jobId}] Job created: ${topic}`);
 
-    if (!scenes || scenes.length === 0) {
-      throw new Error('Script generation failed');
-    }
+    // Background la process pannu - await panna koodadhu!
+    processVideoJob(jobId, { topic, duration, language, voiceChoice, brandName });
 
-    console.log(`[2/6] Script generated: ${scenes.length} scenes`);
-
-    // 2. Generate Voice
-    const fullNarration = scenes.map(s => s.narration).join('. ');
-    const speechResponse = await openai.audio.speech.create({
-      model: "tts-1",
-      voice: voiceChoice,
-      input: fullNarration,
-      speed: 1.0
-    });
-
-    const buffer = Buffer.from(await speechResponse.arrayBuffer());
-    fs.writeFileSync(audioPath, buffer);
-    console.log('[3/6] Audio generated');
-
-    // 3. Get Pexels Video
-    let videoUrl = null;
-    const searchQueries = [scenes[0].visual, 'nature', 'landscape', 'motivational', 'success'];
-
-    for (const query of searchQueries) {
-      try {
-        console.log(`[4/6] Searching Pexels for: ${query}`);
-        const pexelsResponse = await axios.get('https://api.pexels.com/videos/search', {
-          headers: { Authorization: process.env.PEXELS_API_KEY },
-          params: { query, per_page: 5, orientation: 'portrait' },
-          timeout: 10000
-        });
-
-        if (pexelsResponse.data.videos && pexelsResponse.data.videos.length > 0) {
-          const video = pexelsResponse.data.videos[0];
-          const videoFile = video.video_files
-       .filter(v => v.height <= 1280)
-       .sort((a, b) => (b.width || 0) - (a.width || 0))[0] || video.video_files[0];
-
-          if (videoFile && videoFile.link) {
-            videoUrl = videoFile.link;
-            console.log(`[4/6] Found video: ${videoFile.width}x${videoFile.height}`);
-            break;
-          }
-        }
-      } catch (err) {
-        console.log(`Pexels search failed for "${query}"`);
-      }
-    }
-
-    if (!videoUrl) {
-      videoUrl = 'https://videos.pexels.com/video-files/1448735-sd_540_960_24fps.mp4';
-    }
-
-    console.log('[4/6] Downloading video...');
-
-    const videoStream = await axios({
-      url: videoUrl,
-      method: 'GET',
-      responseType: 'stream',
-      timeout: 30000
-    });
-
-    const writer = fs.createWriteStream(tempVideoPath);
-    videoStream.data.pipe(writer);
-
-    await new Promise((resolve, reject) => {
-      writer.on('finish', resolve);
-      writer.on('error', reject);
-      setTimeout(() => reject(new Error('Download timeout')), 30000);
-    });
-
-    const stats = fs.statSync(tempVideoPath);
-    console.log(`[4/6] Downloaded: ${(stats.size / 1024 / 1024).toFixed(2)} MB`);
-
-    if (stats.size < 10000) {
-      throw new Error('Downloaded video file too small');
-    }
-
-    // 4. Create text file for safe overlay
-    const captionText = scenes.map(s => s.caption).join(' | ');
-    fs.writeFileSync(textFilePath, captionText);
-    console.log('[5/6] Text file created');
-
-    console.log('[5/6] Processing video with FFmpeg...');
-
-    // 5. FFmpeg - 720p + Text Overlay
-    const filter = `[0:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2:black,setsar=1,fps=24,drawtext=textfile='${textFilePath}':fontcolor=white:fontsize=48:box=1:boxcolor=black@0.5:boxborderw=10:x=(w-text_w)/2:y=h-150:shadowcolor=black:shadowx=2:shadowy=2,drawtext=text='${brandName}':fontcolor=white:fontsize=32:x=w-tw-30:y=30:box=1:boxcolor=black@0.5:boxborderw=5[outv]`;
-
-    await new Promise((resolve, reject) => {
-      const command = ffmpeg()
- .input(tempVideoPath)
- .input(audioPath)
- .complexFilter([filter])
- .outputOptions([
-          '-map', '[outv]',
-          '-map', '1:a',
-          '-c:v', 'libx264',
-          '-preset', 'superfast',
-          '-crf', '30',
-          '-c:a', 'aac',
-          '-b:a', '96k',
-          '-shortest',
-          '-movflags', '+faststart',
-          '-pix_fmt', 'yuv420p',
-          '-threads', '1',
-          '-t', '35'
-        ])
- .output(outputPath);
-
-      let timeoutId = setTimeout(() => {
-        command.kill('SIGKILL');
-        reject(new Error('FFmpeg timeout after 60s'));
-      }, 60000);
-
-      command
- .on('start', () => {
-          console.log('FFmpeg started - 720p + Text');
-        })
- .on('progress', (p) => {
-          if (p.percent) console.log(`Processing: ${Math.floor(p.percent)}%`);
-        })
- .on('end', () => {
-          clearTimeout(timeoutId);
-          console.log('Video created successfully');
-          resolve();
-        })
- .on('error', (err) => {
-          clearTimeout(timeoutId);
-          reject(new Error(`FFmpeg failed: ${err.message}`));
-        })
- .run();
-    });
-
-    // 6. Upload to Cloudinary
-    console.log('[6/6] Uploading to Cloudinary...');
-    const uploadResult = await cloudinary.uploader.upload(outputPath, {
-      resource_type: 'video',
-      folder: 'autovid',
-      public_id: `video_${timestamp}`,
-      overwrite: true
-    });
-
-    console.log('[6/6] Uploaded:', uploadResult.secure_url);
-
-    // Cleanup
-    [tempVideoPath, audioPath, outputPath, textFilePath].forEach(file => {
-      if (file && fs.existsSync(file)) {
-        try { fs.unlinkSync(file); } catch(e) {}
-      }
-    });
-
-    const timeTaken = ((Date.now() - startTime) / 1000).toFixed(2);
-    console.log(`✅ SUCCESS in ${timeTaken}s`);
-
+    // Udaney response anupu - 1 second la!
     res.json({
       success: true,
-      message: 'Video generated and uploaded!',
-      videoUrl: uploadResult.secure_url,
-      duration: `${timeTaken}s`,
-      resolution: '720x1280',
-      scenes: scenes.length,
-      captions: captionText
+      message: 'Video generation started',
+      jobId: jobId,
+      statusUrl: `/api/status/${jobId}`,
+      estimatedTime: '35-40 seconds'
     });
 
-  } catch (err) {
-    console.error('❌ ERROR:', err.message);
-
-    [tempVideoPath, audioPath, outputPath, textFilePath].forEach(file => {
-      if (file && fs.existsSync(file)) {
-        try { fs.unlinkSync(file); } catch(e) {}
-      }
-    });
-
-    res.status(500).json({
-      error: err.message,
-      hint: 'Check Cloudinary credentials in Render env vars'
-    });
+  } catch (error) {
+    console.error('Job creation error:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
-app.get('/health', (req, res) => {
-  res.json({ status: 'healthy', uptime: process.uptime() });
+// STEP 2: Status check endpoint
+app.get('/api/status/:jobId', (req, res) => {
+  const { jobId } = req.params;
+  const job = jobs.get(jobId);
+
+  if (!job) {
+    return res.status(404).json({
+      success: false,
+      error: 'Job not found'
+    });
+  }
+
+  res.json({
+    success: true,
+    jobId: job.id,
+    status: job.status, // queued, processing, completed, failed
+    progress: job.progress, // 0-100
+    message: job.message,
+    videoUrl: job.videoUrl,
+    error: job.error,
+    createdAt: job.createdAt
+  });
 });
 
+// Background job processor
+async function processVideoJob(jobId, params) {
+  const updateJob = (status, progress, message, videoUrl = null, error = null) => {
+    const job = jobs.get(jobId);
+    if (job) {
+      job.status = status;
+      job.progress = progress;
+      job.message = message;
+      if (videoUrl) job.videoUrl = videoUrl;
+      if (error) job.error = error;
+      jobs.set(jobId, job);
+      console.log(`[${jobId}] ${status}: ${message} (${progress}%)`);
+    }
+  };
+
+  try {
+    const { topic, duration, language, voiceChoice, brandName } = params;
+    updateJob('processing', 5, 'Starting video generation...');
+
+    const tempDir = await ensureTempDir();
+    const timestamp = Date.now();
+
+    // [1/6] Generate script
+    updateJob('processing', 10, 'Generating script...');
+    const script = await generateScript(topic, language || 'English', duration || '30s');
+
+    // [2/6] Generate voiceover
+    updateJob('processing', 25, 'Generating voiceover...');
+    const audioPath = path.join(tempDir, `audio_${timestamp}.mp3`);
+    await generateVoiceover(script.fullText, audioPath, voiceChoice || 'nova');
+
+    // [3/6] Download video
+    updateJob('processing', 40, 'Downloading video clips...');
+    const videoPath = path.join(tempDir, `video_${timestamp}.mp4`);
+    await downloadPexelsVideo(topic, videoPath);
+
+    // [4/6] Create text overlay
+    updateJob('processing', 55, 'Creating text overlay...');
+    const textFilePath = path.join(tempDir, `text_${timestamp}.txt`);
+    await createTextFile(script.scenes, brandName, textFilePath);
+
+    // [5/6] Process with FFmpeg
+    updateJob('processing', 70, 'Processing video with FFmpeg...');
+    const outputPath = path.join(tempDir, `output_${timestamp}.mp4`);
+    await processVideo(videoPath, audioPath, textFilePath, outputPath, brandName);
+
+    // [6/6] Upload to Cloudinary
+    updateJob('processing', 90, 'Uploading to Cloudinary...');
+    const cloudinaryUrl = await uploadToCloudinary(outputPath, jobId);
+
+    // Success!
+    updateJob('completed', 100, 'Video generated successfully!', cloudinaryUrl);
+
+    // Cleanup temp files
+    setTimeout(async () => {
+      await fs.unlink(audioPath).catch(() => {});
+      await fs.unlink(videoPath).catch(() => {});
+      await fs.unlink(textFilePath).catch(() => {});
+      await fs.unlink(outputPath).catch(() => {});
+    }, 5000);
+
+    // Auto delete job after 1 hour
+    setTimeout(() => {
+      jobs.delete(jobId);
+    }, 3600000);
+
+  } catch (error) {
+    console.error(`[${jobId}] Error:`, error);
+    updateJob('failed', 0, 'Video generation failed', null, error.message);
+  }
+}
+
+// Helper functions
+async function generateScript(topic, language, duration) {
+  const response = await openai.chat.completions.create({
+    model: 'gpt-4o-mini',
+    messages: [{
+      role: 'user',
+      content: `Create a ${duration} ${language} motivational video script about "${topic}".
+      Break into 4 scenes. Return JSON: {"fullText": "complete narration", "scenes": [{"text": "scene text", "duration": 7}]}`
+    }],
+    response_format: { type: 'json_object' }
+  });
+  return JSON.parse(response.choices[0].message.content);
+}
+
+async function generateVoiceover(text, outputPath, voice) {
+  const response = await openai.audio.speech.create({
+    model: 'tts-1',
+    voice: voice,
+    input: text,
+    response_format: 'mp3'
+  });
+  const buffer = Buffer.from(await response.arrayBuffer());
+  await fs.writeFile(outputPath, buffer);
+}
+
+async function downloadPexelsVideo(query, outputPath) {
+  const searchRes = await axios.get('https://api.pexels.com/videos/search', {
+    headers: { Authorization: PEXELS_API_KEY },
+    params: { query, per_page: 1, orientation: 'portrait' }
+  });
+
+  const video = searchRes.data.videos[0];
+  const videoFile = video.video_files.find(f => f.quality === 'hd' && f.height >= 1280) || video.video_files[0];
+
+  const videoRes = await axios.get(videoFile.link, { responseType: 'arraybuffer' });
+  await fs.writeFile(outputPath, videoRes.data);
+}
+
+async function createTextFile(scenes, brandName, outputPath) {
+  let content = '';
+  scenes.forEach((scene, i) => {
+    content += `${scene.duration}\n${scene.text}\n`;
+  });
+  await fs.writeFile(outputPath, content);
+}
+
+async function processVideo(videoPath, audioPath, textFilePath, outputPath, brandName) {
+  return new Promise((resolve, reject) => {
+    ffmpeg()
+     .input(videoPath)
+     .input(audioPath)
+     .complexFilter([
+        '[0:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2[bg]',
+        `[bg]drawtext=text='${brandName || "AutoVid AI"}':fontcolor=white:fontsize=32:x=w-tw-40:y=40:box=1:boxcolor=black@0.5:boxborderw=10`,
+        'drawtext=textfile=' + textFilePath + ':fontcolor=white:fontsize=48:x=(w-text_w)/2:y=h-150:box=1:boxcolor=black@0.6:boxborderw=15:reload=1[v]'
+      ])
+     .outputOptions([
+        '-map [v]',
+        '-map 1:a',
+        '-c:v libx264',
+        '-preset fast',
+        '-crf 23',
+        '-c:a aac',
+        '-shortest'
+      ])
+     .save(outputPath)
+     .on('end', resolve)
+     .on('error', reject);
+  });
+}
+
+async function uploadToCloudinary(filePath, jobId) {
+  const result = await cloudinary.uploader.upload(filePath, {
+    resource_type: 'video',
+    folder: 'autovid',
+    public_id: `video_${jobId}`,
+    overwrite: true
+  });
+  return result.secure_url;
+}
+
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+app.listen(PORT, () => {
+  console.log(`🚀 AutoVid AI Server running on port ${PORT}`);
 });
