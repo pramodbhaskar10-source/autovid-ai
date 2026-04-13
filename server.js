@@ -94,7 +94,7 @@ app.post('/api/generate', async (req, res) => {
     // THIS IS THE FIXED PART - PROPER FILTER CHAIN
     const captionText = scenes.map(s => s.narration).join(' ').replace(/'/g, "\\'").replace(/:/g, "\\:");
 
-    let filter = '[0:v]scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black,fps=30;';
+    let filter = '[0:v]scale=1080:1920...;';
 
     // Add brand watermark
     filter += `drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:text='${brandName}':fontcolor=white:fontsize=45:x=w-tw-50:y=50:shadowcolor=black:shadowx=3:shadowy=3;`;
