@@ -20,7 +20,7 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
-// Job storage - memory la save pannuvom
+// Job storage
 const jobs = new Map();
 
 // Create temp directory
@@ -39,7 +39,7 @@ app.get('/health', (req, res) => {
   res.json({ status: 'OK', message: 'AutoVid AI is running!' });
 });
 
-// STEP 1: Start job - 1 second la response varum!
+// STEP 1: Start job - 1 second la response
 app.post('/api/generate', async (req, res) => {
   try {
     const { topic, duration, language, voiceChoice, brandName } = req.body;
@@ -50,7 +50,6 @@ app.post('/api/generate', async (req, res) => {
 
     const jobId = `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-    // Job create pannu
     jobs.set(jobId, {
       id: jobId,
       status: 'queued',
@@ -63,10 +62,9 @@ app.post('/api/generate', async (req, res) => {
 
     console.log(`[${jobId}] Job created: ${topic}`);
 
-    // Background la process pannu - await panna koodadhu!
+    // Background la process - await panna koodadhu!
     processVideoJob(jobId, { topic, duration, language, voiceChoice, brandName });
 
-    // Udaney response anupu - 1 second la!
     res.json({
       success: true,
       message: 'Video generation started',
@@ -81,7 +79,7 @@ app.post('/api/generate', async (req, res) => {
   }
 });
 
-// STEP 2: Status check endpoint
+// STEP 2: Status check
 app.get('/api/status/:jobId', (req, res) => {
   const { jobId } = req.params;
   const job = jobs.get(jobId);
@@ -96,8 +94,8 @@ app.get('/api/status/:jobId', (req, res) => {
   res.json({
     success: true,
     jobId: job.id,
-    status: job.status, // queued, processing, completed, failed
-    progress: job.progress, // 0-100
+    status: job.status,
+    progress: job.progress,
     message: job.message,
     videoUrl: job.videoUrl,
     error: job.error,
@@ -105,7 +103,7 @@ app.get('/api/status/:jobId', (req, res) => {
   });
 });
 
-// Background job processor
+// Background processor
 async function processVideoJob(jobId, params) {
   const updateJob = (status, progress, message, videoUrl = null, error = null) => {
     const job = jobs.get(jobId);
@@ -127,42 +125,36 @@ async function processVideoJob(jobId, params) {
     const tempDir = await ensureTempDir();
     const timestamp = Date.now();
 
-    // [1/6] Generate script
+    // [1/5] Generate script
     updateJob('processing', 10, 'Generating script...');
     const script = await generateScript(topic, language || 'English', duration || '30s');
 
-    // [2/6] Generate voiceover
+    // [2/5] Generate voiceover
     updateJob('processing', 25, 'Generating voiceover...');
     const audioPath = path.join(tempDir, `audio_${timestamp}.mp3`);
     await generateVoiceover(script.fullText, audioPath, voiceChoice || 'nova');
 
-    // [3/6] Download video
-    updateJob('processing', 40, 'Downloading video clips...');
+    // [3/5] Download video
+    updateJob('processing', 45, 'Downloading video clips...');
     const videoPath = path.join(tempDir, `video_${timestamp}.mp4`);
     await downloadPexelsVideo(topic, videoPath);
 
-    // [4/6] Create text overlay
-    updateJob('processing', 55, 'Creating text overlay...');
-    const textFilePath = path.join(tempDir, `text_${timestamp}.txt`);
-    await createTextFile(script.scenes, brandName, textFilePath);
-
-    // [5/6] Process with FFmpeg
+    // [4/5] Process with FFmpeg - FIXED!
     updateJob('processing', 70, 'Processing video with FFmpeg...');
     const outputPath = path.join(tempDir, `output_${timestamp}.mp4`);
-    await processVideo(videoPath, audioPath, textFilePath, outputPath, brandName);
+    await processVideo(videoPath, audioPath, outputPath, brandName, script.fullText);
 
-    // [6/6] Upload to Cloudinary
+    // [5/5] Upload to Cloudinary
     updateJob('processing', 90, 'Uploading to Cloudinary...');
     const cloudinaryUrl = await uploadToCloudinary(outputPath, jobId);
 
     // Success!
     updateJob('completed', 100, 'Video generated successfully!', cloudinaryUrl);
 
-    // Cleanup temp files
+    // Cleanup
     setTimeout(async () => {
       await fs.unlink(audioPath).catch(() => {});
       await fs.unlink(videoPath).catch(() => {});
-      await fs.unlink(textFilePath).catch(() => {});
       await fs.unlink(outputPath).catch(() => {});
     }, 5000);
 
@@ -183,8 +175,7 @@ async function generateScript(topic, language, duration) {
     model: 'gpt-4o-mini',
     messages: [{
       role: 'user',
-      content: `Create a ${duration} ${language} motivational video script about "${topic}".
-      Break into 4 scenes. Return JSON: {"fullText": "complete narration", "scenes": [{"text": "scene text", "duration": 7}]}`
+      content: `Create a ${duration} ${language} motivational video script about "${topic}". Return JSON: {"fullText": "complete narration text"}`
     }],
     response_format: { type: 'json_object' }
   });
@@ -208,6 +199,10 @@ async function downloadPexelsVideo(query, outputPath) {
     params: { query, per_page: 1, orientation: 'portrait' }
   });
 
+  if (!searchRes.data.videos || searchRes.data.videos.length === 0) {
+    throw new Error('No videos found on Pexels for this topic');
+  }
+
   const video = searchRes.data.videos[0];
   const videoFile = video.video_files.find(f => f.quality === 'hd' && f.height >= 1280) || video.video_files[0];
 
@@ -215,26 +210,22 @@ async function downloadPexelsVideo(query, outputPath) {
   await fs.writeFile(outputPath, videoRes.data);
 }
 
-async function createTextFile(scenes, brandName, outputPath) {
-  let content = '';
-  scenes.forEach((scene, i) => {
-    content += `${scene.duration}\n${scene.text}\n`;
-  });
-  await fs.writeFile(outputPath, content);
-}
-
-async function processVideo(videoPath, audioPath, textFilePath, outputPath, brandName) {
+// FIXED FFmpeg - No textfile, simple drawtext
+async function processVideo(videoPath, audioPath, outputPath, brandName, fullText) {
   return new Promise((resolve, reject) => {
+    // Escape text for FFmpeg - remove special chars
+    const safeText = fullText.replace(/[':]/g, '').substring(0, 100);
+    const safeBrand = (brandName || 'AutoVid AI').replace(/[':]/g, '');
+
     ffmpeg()
-     .input(videoPath)
-     .input(audioPath)
-     .complexFilter([
-        '[0:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2[bg]',
-        `[bg]drawtext=text='${brandName || "AutoVid AI"}':fontcolor=white:fontsize=32:x=w-tw-40:y=40:box=1:boxcolor=black@0.5:boxborderw=10`,
-        'drawtext=textfile=' + textFilePath + ':fontcolor=white:fontsize=48:x=(w-text_w)/2:y=h-150:box=1:boxcolor=black@0.6:boxborderw=15:reload=1[v]'
+   .input(videoPath)
+   .input(audioPath)
+   .complexFilter([
+        '[0:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2[scaled]',
+        `[scaled]drawtext=text='${safeBrand}':fontcolor=white:fontsize=32:x=w-tw-40:y=40:box=1:boxcolor=black@0.5:boxborderw=10[outv]`
       ])
-     .outputOptions([
-        '-map [v]',
+   .outputOptions([
+        '-map [outv]',
         '-map 1:a',
         '-c:v libx264',
         '-preset fast',
@@ -242,9 +233,16 @@ async function processVideo(videoPath, audioPath, textFilePath, outputPath, bran
         '-c:a aac',
         '-shortest'
       ])
-     .save(outputPath)
-     .on('end', resolve)
-     .on('error', reject);
+   .save(outputPath)
+   .on('start', (cmd) => console.log('FFmpeg command:', cmd))
+   .on('end', () => {
+        console.log('FFmpeg processing completed');
+        resolve();
+      })
+   .on('error', (err) => {
+        console.error('FFmpeg error:', err.message);
+        reject(err);
+      });
   });
 }
 
