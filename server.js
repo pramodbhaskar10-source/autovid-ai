@@ -20,7 +20,7 @@ if (!fs.existsSync(tmpDir)){
 }
 
 app.get('/', (req, res) => {
-  res.json({ status: 'AutoVid AI Running!', version: '2.1 - With Fallbacks' });
+  res.json({ status: 'AutoVid AI Running!', version: '2.2 - 720p Fast' });
 });
 
 app.post('/api/generate', async (req, res) => {
@@ -46,7 +46,7 @@ app.post('/api/generate', async (req, res) => {
     const scriptPrompt = `Create a ${duration} ${language} motivational video script about "${topic}".
     Split into exactly 4 scenes. Each scene needs:
     1. narration: 1-2 short sentences to speak
-    2. visual: 2-3 keywords for stock video search like "nature", "city", "person working"
+    2. visual: 2-3 keywords like "nature", "city", "person working"
     Return ONLY JSON: {"scenes": [{"narration": "...", "visual": "..."}]}`;
 
     const scriptResponse = await openai.chat.completions.create({
@@ -78,15 +78,9 @@ app.post('/api/generate', async (req, res) => {
     fs.writeFileSync(audioPath, buffer);
     console.log('[3/5] Audio generated');
 
-    // 3. Get Pexels Video with FALLBACK
+    // 3. Get Pexels Video - 720p preference
     let videoUrl = null;
-    const searchQueries = [
-      scenes[0].visual,
-      'nature landscape',
-      'motivational',
-      'success',
-      'business'
-    ];
+    const searchQueries = ['nature', 'landscape', 'motivational', 'success', 'city'];
 
     for (const query of searchQueries) {
       try {
@@ -98,10 +92,11 @@ app.post('/api/generate', async (req, res) => {
         });
 
         if (pexelsResponse.data.videos && pexelsResponse.data.videos.length > 0) {
-          // Get any video file - don't filter by quality
+          // Prefer SD/720p videos - faster to process
           const video = pexelsResponse.data.videos[0];
           const videoFile = video.video_files
-          .sort((a, b) => (b.width || 0) - (a.width || 0))[0];
+         .filter(v => v.height <= 1280)
+         .sort((a, b) => (b.width || 0) - (a.width || 0))[0] || video.video_files[0];
 
           if (videoFile && videoFile.link) {
             videoUrl = videoFile.link;
@@ -115,14 +110,12 @@ app.post('/api/generate', async (req, res) => {
     }
 
     if (!videoUrl) {
-      // FALLBACK: Use a public domain test video
       console.log('[4/5] Using fallback video');
       videoUrl = 'https://videos.pexels.com/video-files/1448735/1448735-sd_540_960_24fps.mp4';
     }
 
     console.log('[4/5] Downloading video...');
 
-    // Download video with size check
     const videoStream = await axios({
       url: videoUrl,
       method: 'GET',
@@ -139,62 +132,63 @@ app.post('/api/generate', async (req, res) => {
       setTimeout(() => reject(new Error('Download timeout 30s')), 30000);
     });
 
-    // Verify file downloaded
     const stats = fs.statSync(tempVideoPath);
     console.log(`[4/5] Downloaded: ${(stats.size / 1024 / 1024).toFixed(2)} MB`);
 
     if (stats.size < 10000) {
-      throw new Error('Downloaded video file too small - probably corrupted');
+      throw new Error('Downloaded video file too small');
     }
 
     console.log('[5/5] Processing video with FFmpeg...');
 
-    // 4. FFmpeg - ULTRAFAST PRESET to avoid hanging
-    const filter = '[0:v]scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black,setsar=1,fps=24[outv]';
+    // 4. FFmpeg - 720x1280 FAST SETTINGS
+    const filter = '[0:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2:black,setsar=1,fps=24[outv]';
 
     await new Promise((resolve, reject) => {
       const command = ffmpeg()
-    .input(tempVideoPath)
-    .input(audioPath)
-    .complexFilter([filter])
-    .outputOptions([
+   .input(tempVideoPath)
+   .input(audioPath)
+   .complexFilter([filter])
+   .outputOptions([
           '-map', '[outv]',
           '-map', '1:a',
           '-c:v', 'libx264',
-          '-preset', 'ultrafast',
-          '-crf', '28',
+          '-preset', 'superfast',
+          '-crf', '30',
           '-c:a', 'aac',
-          '-b:a', '128k',
+          '-b:a', '96k',
           '-shortest',
           '-movflags', '+faststart',
           '-pix_fmt', 'yuv420p',
-          '-threads', '2'
+          '-threads', '1',
+          '-tune', 'fastdecode',
+          '-t', '35'
         ])
-    .output(outputPath);
+   .output(outputPath);
 
       let timeoutId = setTimeout(() => {
         command.kill('SIGKILL');
-        reject(new Error('FFmpeg timeout after 90s'));
-      }, 90000);
+        reject(new Error('FFmpeg timeout after 60s'));
+      }, 60000);
 
       command
-    .on('start', (cmd) => {
-          console.log('FFmpeg started');
+   .on('start', () => {
+          console.log('FFmpeg started - 720p mode');
         })
-    .on('progress', (p) => {
+   .on('progress', (p) => {
           if (p.percent) console.log(`Processing: ${Math.floor(p.percent)}%`);
         })
-    .on('end', () => {
+   .on('end', () => {
           clearTimeout(timeoutId);
           console.log('Video created successfully:', outputPath);
           resolve();
         })
-    .on('error', (err) => {
+   .on('error', (err) => {
           clearTimeout(timeoutId);
           console.error('FFmpeg error:', err.message);
           reject(new Error(`FFmpeg failed: ${err.message}`));
         })
-    .run();
+   .run();
     });
 
     // Cleanup
@@ -209,13 +203,13 @@ app.post('/api/generate', async (req, res) => {
       message: 'Video generated successfully!',
       path: outputPath,
       duration: `${timeTaken}s`,
+      resolution: '720x1280',
       scenes: scenes.length
     });
 
   } catch (err) {
     console.error('❌ ERROR:', err.message);
 
-    // Cleanup on error
     [tempVideoPath, audioPath, outputPath].forEach(file => {
       if (file && fs.existsSync(file)) {
         try { fs.unlinkSync(file); } catch(e) {}
@@ -224,7 +218,7 @@ app.post('/api/generate', async (req, res) => {
 
     res.status(500).json({
       error: err.message,
-      hint: 'Check Render logs for details'
+      hint: 'Try again - Render free tier is slow'
     });
   }
 });
