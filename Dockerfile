@@ -1,7 +1,12 @@
-FROM node:20-slim
+FROM node:20
 
-# FFmpeg install pannu
-RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
+# FFmpeg + Fonts install pannu
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    fonts-dejavu-core \
+    fonts-liberation \
+    fontconfig \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
