@@ -34,7 +34,7 @@ const ensureTempDir = async () => {
 };
 
 app.get('/health', (req, res) => {
-  res.json({ status: 'OK', message: 'AutoVid AI with ElevenLabs Free Tier is running!' });
+  res.json({ status: 'OK', message: 'AutoVid AI with ElevenLabs Turbo v2.5 is running!' });
 });
 
 app.post('/api/generate', async (req, res) => {
@@ -155,31 +155,32 @@ async function generateScript(topic, language, duration) {
   return JSON.parse(response.choices[0].message.content);
 }
 
-// ELEVENLABS FREE TIER - 100% WORKING - NO 402 ERROR
+// ELEVENLABS TURBO V2.5 - NEW FREE TIER 2024
 async function generateVoiceover(text, outputPath, voiceChoice, language) {
-  // FREE TIER VOICE IDS - TESTED & WORKING
   const voiceMap = {
-    'nova': '21m00Tcm4TlvDq8ikWAM', // Rachel - Female, Free
-    'shimmer': 'EXAVITQu4vr4xnSDxMaL', // Sarah - Female, Free
-    'echo': 'TxGEqnHWrfWFTfGW9XjX', // Josh - Male, Free
-    'fable': 'VR6AewLTigWG4xSOukaG', // Arnold - Male, Free
-    'onyx': 'MF3mGyEYCl7XYWbV9V6O', // Ethan - Male, Free
-    'default': '21m00Tcm4TlvDq8ikWAM' // Rachel default
+    'nova': '21m00Tcm4TlvDq8ikWAM', // Rachel - Free
+    'shimmer': 'EXAVITQu4vr4xnSDxMaL', // Sarah - Free
+    'echo': 'TxGEqnHWrfWFTfGW9XjX', // Josh - Free
+    'fable': 'VR6AewLTigWG4xSOukaG', // Arnold - Free
+    'onyx': 'MF3mGyEYCl7XYWbV9V6O', // Ethan - Free
+    'default': '21m00Tcm4TlvDq8ikWAM'
   };
 
   const voiceId = voiceMap[voiceChoice] || voiceMap['default'];
 
-  console.log(`[${voiceChoice}] Using ElevenLabs voice ID: ${voiceId}`);
+  console.log(`[${voiceChoice}] Using ElevenLabs Turbo v2.5: ${voiceId}`);
 
   try {
     const response = await axios.post(
       `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
       {
         text: text,
-        model_id: 'eleven_monolingual_v1', // FREE MODEL - WORKS ON FREE PLAN
+        model_id: 'eleven_turbo_v2_5', // NEW FREE MODEL
         voice_settings: {
           stability: 0.5,
-          similarity_boost: 0.5
+          similarity_boost: 0.75,
+          style: 0.0,
+          use_speaker_boost: true
         }
       },
       {
@@ -192,7 +193,7 @@ async function generateVoiceover(text, outputPath, voiceChoice, language) {
     );
 
     await fs.writeFile(outputPath, response.data);
-    console.log('ElevenLabs: Free tier voice generated successfully');
+    console.log('ElevenLabs: Turbo v2.5 voice generated successfully');
   } catch (error) {
     console.error('ElevenLabs Error:', error.response?.status, error.response?.data?.toString());
     throw new Error(`ElevenLabs failed: ${error.response?.status || error.message}`);
@@ -219,13 +220,13 @@ async function processVideo(videoPath, audioPath, outputPath, brandName) {
   return new Promise((resolve, reject) => {
     const safeBrand = (brandName || 'AutoVid AI').replace(/[':]/g, '');
     ffmpeg()
-     .input(videoPath)
-     .input(audioPath)
-     .complexFilter([
+    .input(videoPath)
+    .input(audioPath)
+    .complexFilter([
         '[0:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2[scaled]',
         `[scaled]drawtext=text='${safeBrand}':fontcolor=white:fontsize=32:x=w-tw-40:y=40:box=1:boxcolor=black@0.5:boxborderw=10[outv]`
       ])
-     .outputOptions([
+    .outputOptions([
         '-map [outv]',
         '-map 1:a',
         '-c:v libx264',
@@ -234,12 +235,12 @@ async function processVideo(videoPath, audioPath, outputPath, brandName) {
         '-c:a aac',
         '-shortest'
       ])
-     .save(outputPath)
-     .on('end', () => {
+    .save(outputPath)
+    .on('end', () => {
         console.log('FFmpeg processing completed');
         resolve();
       })
-     .on('error', (err) => {
+    .on('error', (err) => {
         console.error('FFmpeg error:', err.message);
         reject(err);
       });
@@ -258,5 +259,5 @@ async function uploadToCloudinary(filePath, jobId) {
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
-  console.log(`🚀 AutoVid AI Server with ElevenLabs Free Tier running on port ${PORT}`);
+  console.log(`🚀 AutoVid AI with ElevenLabs Turbo v2.5 running on port ${PORT}`);
 });
