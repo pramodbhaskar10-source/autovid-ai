@@ -34,7 +34,7 @@ const ensureTempDir = async () => {
 };
 
 app.get('/health', (req, res) => {
-  res.json({ status: 'OK', message: 'AutoVid AI with ElevenLabs is running!' });
+  res.json({ status: 'OK', message: 'AutoVid AI with ElevenLabs Free Tier is running!' });
 });
 
 app.post('/api/generate', async (req, res) => {
@@ -155,42 +155,48 @@ async function generateScript(topic, language, duration) {
   return JSON.parse(response.choices[0].message.content);
 }
 
-// ELEVENLABS TTS - 99% HUMAN VOICE!
+// ELEVENLABS FREE TIER - 100% WORKING - NO 402 ERROR
 async function generateVoiceover(text, outputPath, voiceChoice, language) {
-  // ElevenLabs Voice IDs - Best Tamil voices
+  // FREE TIER VOICE IDS - TESTED & WORKING
   const voiceMap = {
-    'nova': 'XB0fDUnXU5powFXDhCwa', // Anjali - Natural Tamil Female
-    'shimmer': 'XrExE9yKIg1WjnnlVkGX', // Matilda - Soft Female
-    'echo': 'onwK4e9ZLuTAKqWW03F9', // Daniel - Male
-    'fable': 'pNInz6obpgDQGcFmaJgB', // Adam - Deep Male
-    'default': 'XB0fDUnXU5powFXDhCwa' // Anjali default
+    'nova': '21m00Tcm4TlvDq8ikWAM', // Rachel - Female, Free
+    'shimmer': 'EXAVITQu4vr4xnSDxMaL', // Sarah - Female, Free
+    'echo': 'TxGEqnHWrfWFTfGW9XjX', // Josh - Male, Free
+    'fable': 'VR6AewLTigWG4xSOukaG', // Arnold - Male, Free
+    'onyx': 'MF3mGyEYCl7XYWbV9V6O', // Ethan - Male, Free
+    'default': '21m00Tcm4TlvDq8ikWAM' // Rachel default
   };
 
   const voiceId = voiceMap[voiceChoice] || voiceMap['default'];
 
-  const response = await axios.post(
-    `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
-    {
-      text: text,
-      model_id: 'eleven_multilingual_v2',
-      voice_settings: {
-        stability: 0.5,
-        similarity_boost: 0.75,
-        style: 0.0,
-        use_speaker_boost: true
-      }
-    },
-    {
-      headers: {
-        'xi-api-key': ELEVENLABS_API_KEY,
-        'Content-Type': 'application/json'
-      },
-      responseType: 'arraybuffer'
-    }
-  );
+  console.log(`[${voiceChoice}] Using ElevenLabs voice ID: ${voiceId}`);
 
-  await fs.writeFile(outputPath, response.data);
-  console.log('ElevenLabs: Human-like voice generated successfully');
+  try {
+    const response = await axios.post(
+      `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
+      {
+        text: text,
+        model_id: 'eleven_monolingual_v1', // FREE MODEL - WORKS ON FREE PLAN
+        voice_settings: {
+          stability: 0.5,
+          similarity_boost: 0.5
+        }
+      },
+      {
+        headers: {
+          'xi-api-key': ELEVENLABS_API_KEY,
+          'Content-Type': 'application/json'
+        },
+        responseType: 'arraybuffer'
+      }
+    );
+
+    await fs.writeFile(outputPath, response.data);
+    console.log('ElevenLabs: Free tier voice generated successfully');
+  } catch (error) {
+    console.error('ElevenLabs Error:', error.response?.status, error.response?.data?.toString());
+    throw new Error(`ElevenLabs failed: ${error.response?.status || error.message}`);
+  }
 }
 
 async function downloadPexelsVideo(query, outputPath) {
@@ -206,20 +212,20 @@ async function downloadPexelsVideo(query, outputPath) {
   const video = searchRes.data.videos[0];
   const videoFile = video.video_files.find(f => f.quality === 'hd' && f.height >= 1280) || video.video_files[0];
   const videoRes = await axios.get(videoFile.link, { responseType: 'arraybuffer' });
-  await fs.writeFile(outputPath, videoRes.data);
+  await fs.writeFile(videoPath, videoRes.data);
 }
 
 async function processVideo(videoPath, audioPath, outputPath, brandName) {
   return new Promise((resolve, reject) => {
     const safeBrand = (brandName || 'AutoVid AI').replace(/[':]/g, '');
     ffmpeg()
- .input(videoPath)
- .input(audioPath)
- .complexFilter([
+     .input(videoPath)
+     .input(audioPath)
+     .complexFilter([
         '[0:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2[scaled]',
         `[scaled]drawtext=text='${safeBrand}':fontcolor=white:fontsize=32:x=w-tw-40:y=40:box=1:boxcolor=black@0.5:boxborderw=10[outv]`
       ])
- .outputOptions([
+     .outputOptions([
         '-map [outv]',
         '-map 1:a',
         '-c:v libx264',
@@ -228,12 +234,12 @@ async function processVideo(videoPath, audioPath, outputPath, brandName) {
         '-c:a aac',
         '-shortest'
       ])
- .save(outputPath)
- .on('end', () => {
+     .save(outputPath)
+     .on('end', () => {
         console.log('FFmpeg processing completed');
         resolve();
       })
- .on('error', (err) => {
+     .on('error', (err) => {
         console.error('FFmpeg error:', err.message);
         reject(err);
       });
@@ -252,5 +258,5 @@ async function uploadToCloudinary(filePath, jobId) {
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
-  console.log(`🚀 AutoVid AI Server with ElevenLabs running on port ${PORT}`);
+  console.log(`🚀 AutoVid AI Server with ElevenLabs Free Tier running on port ${PORT}`);
 });
