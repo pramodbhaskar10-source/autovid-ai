@@ -155,9 +155,7 @@ async function generateScript(topic, language, duration) {
   return JSON.parse(response.choices[0].message.content);
 }
 
-// ELEVENLABS MULTILINGUAL V2 - PAID PLAN - PREMIUM TAMIL
 async function generateVoiceover(text, outputPath, voiceChoice, language) {
-  // PAID PLAN VOICES - TAMIL OPTIMIZED
   const voiceMap = {
     'nova': 'XB0fDUnXU5powFXDhCwa', // Anjali - Premium Tamil Female
     'shimmer': 'jsCqWAovK2LkecY7zXl4', // Priya - Tamil Female
@@ -177,12 +175,12 @@ async function generateVoiceover(text, outputPath, voiceChoice, language) {
       `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
       {
         text: text,
-        model_id: 'eleven_multilingual_v2', // PREMIUM MODEL - PAID
+        model_id: 'eleven_multilingual_v2',
         voice_settings: {
-          stability: 0.45, // More emotional variation
-          similarity_boost: 0.85, // Stronger voice match
-          style: 0.65, // Cinematic expression
-          use_speaker_boost: true // Clarity boost
+          stability: 0.45,
+          similarity_boost: 0.85,
+          style: 0.65,
+          use_speaker_boost: true
         }
       },
       {
@@ -202,6 +200,7 @@ async function generateVoiceover(text, outputPath, voiceChoice, language) {
   }
 }
 
+// FIXED - videoPath bug removed
 async function downloadPexelsVideo(query, outputPath) {
   const searchRes = await axios.get('https://api.pexels.com/videos/search', {
     headers: { Authorization: PEXELS_API_KEY },
@@ -215,35 +214,35 @@ async function downloadPexelsVideo(query, outputPath) {
   const video = searchRes.data.videos[0];
   const videoFile = video.video_files.find(f => f.quality === 'hd' && f.height >= 1280) || video.video_files[0];
   const videoRes = await axios.get(videoFile.link, { responseType: 'arraybuffer' });
-  await fs.writeFile(videoPath, videoRes.data);
+  await fs.writeFile(outputPath, videoRes.data); // ✅ CORRECT
 }
 
 async function processVideo(videoPath, audioPath, outputPath, brandName) {
   return new Promise((resolve, reject) => {
     const safeBrand = (brandName || 'AutoVid AI').replace(/[':]/g, '');
     ffmpeg()
-   .input(videoPath)
-   .input(audioPath)
-   .complexFilter([
+ .input(videoPath)
+ .input(audioPath)
+ .complexFilter([
         '[0:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2[scaled]',
         `[scaled]drawtext=text='${safeBrand}':fontcolor=white:fontsize=32:x=w-tw-40:y=40:box=1:boxcolor=black@0.5:boxborderw=10[outv]`
       ])
-   .outputOptions([
+ .outputOptions([
         '-map [outv]',
         '-map 1:a',
         '-c:v libx264',
         '-preset fast',
         '-crf 23',
         '-c:a aac',
-        '-b:a 192k', // Higher audio bitrate for premium voice
+        '-b:a 192k',
         '-shortest'
       ])
-   .save(outputPath)
-   .on('end', () => {
+ .save(outputPath)
+ .on('end', () => {
         console.log('FFmpeg processing completed');
         resolve();
       })
-   .on('error', (err) => {
+ .on('error', (err) => {
         console.error('FFmpeg error:', err.message);
         reject(err);
       });
