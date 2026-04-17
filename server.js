@@ -34,7 +34,7 @@ const ensureTempDir = async () => {
 };
 
 app.get('/health', (req, res) => {
-  res.json({ status: 'OK', message: 'AutoVid AI with ElevenLabs Turbo v2.5 is running!' });
+  res.json({ status: 'OK', message: 'AutoVid AI with ElevenLabs Multilingual v2 is running!' });
 });
 
 app.post('/api/generate', async (req, res) => {
@@ -112,7 +112,7 @@ async function processVideoJob(jobId, params) {
     updateJob('processing', 10, 'Generating script...');
     const script = await generateScript(topic, language || 'Tamil', duration || '30s');
 
-    updateJob('processing', 25, 'Generating natural voiceover...');
+    updateJob('processing', 25, 'Generating premium Tamil voiceover...');
     const audioPath = path.join(tempDir, `audio_${timestamp}.mp3`);
     await generateVoiceover(script.fullText, audioPath, voiceChoice || 'nova', language || 'Tamil');
 
@@ -148,39 +148,41 @@ async function generateScript(topic, language, duration) {
     model: 'gpt-4o-mini',
     messages: [{
       role: 'user',
-      content: `Create a ${duration} ${language} motivational video script about "${topic}". Return JSON: {"fullText": "complete narration text"}`
+      content: `Create a ${duration} ${language} motivational video script about "${topic}". Make it emotional, powerful, and cinematic. Return JSON: {"fullText": "complete narration text"}`
     }],
     response_format: { type: 'json_object' }
   });
   return JSON.parse(response.choices[0].message.content);
 }
 
-// ELEVENLABS TURBO V2.5 - NEW FREE TIER 2024
+// ELEVENLABS MULTILINGUAL V2 - PAID PLAN - PREMIUM TAMIL
 async function generateVoiceover(text, outputPath, voiceChoice, language) {
+  // PAID PLAN VOICES - TAMIL OPTIMIZED
   const voiceMap = {
-    'nova': '21m00Tcm4TlvDq8ikWAM', // Rachel - Free
-    'shimmer': 'EXAVITQu4vr4xnSDxMaL', // Sarah - Free
-    'echo': 'TxGEqnHWrfWFTfGW9XjX', // Josh - Free
-    'fable': 'VR6AewLTigWG4xSOukaG', // Arnold - Free
-    'onyx': 'MF3mGyEYCl7XYWbV9V6O', // Ethan - Free
-    'default': '21m00Tcm4TlvDq8ikWAM'
+    'nova': 'XB0fDUnXU5powFXDhCwa', // Anjali - Premium Tamil Female
+    'shimmer': 'jsCqWAovK2LkecY7zXl4', // Priya - Tamil Female
+    'echo': 'D4bWdEbF2Q2tDGN6dXj0', // Arjun - Tamil Male
+    'fable': 'bVMeCyTHy58xNoL34h3p', // Vikram - Tamil Male
+    'onyx': 'onwK4e9ZLuTAKqWW03F9', // Daniel - English Male
+    'alloy': 'FGY2WhTYpPnrIDTdsZk9', // Laura - English Female
+    'default': 'XB0fDUnXU5powFXDhCwa' // Anjali default for Tamil
   };
 
   const voiceId = voiceMap[voiceChoice] || voiceMap['default'];
 
-  console.log(`[${voiceChoice}] Using ElevenLabs Turbo v2.5: ${voiceId}`);
+  console.log(`[${voiceChoice}] Using ElevenLabs Multilingual v2: ${voiceId}`);
 
   try {
     const response = await axios.post(
       `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
       {
         text: text,
-        model_id: 'eleven_turbo_v2_5', // NEW FREE MODEL
+        model_id: 'eleven_multilingual_v2', // PREMIUM MODEL - PAID
         voice_settings: {
-          stability: 0.5,
-          similarity_boost: 0.75,
-          style: 0.0,
-          use_speaker_boost: true
+          stability: 0.45, // More emotional variation
+          similarity_boost: 0.85, // Stronger voice match
+          style: 0.65, // Cinematic expression
+          use_speaker_boost: true // Clarity boost
         }
       },
       {
@@ -193,7 +195,7 @@ async function generateVoiceover(text, outputPath, voiceChoice, language) {
     );
 
     await fs.writeFile(outputPath, response.data);
-    console.log('ElevenLabs: Turbo v2.5 voice generated successfully');
+    console.log('ElevenLabs: Multilingual v2 Tamil voice generated successfully');
   } catch (error) {
     console.error('ElevenLabs Error:', error.response?.status, error.response?.data?.toString());
     throw new Error(`ElevenLabs failed: ${error.response?.status || error.message}`);
@@ -220,27 +222,28 @@ async function processVideo(videoPath, audioPath, outputPath, brandName) {
   return new Promise((resolve, reject) => {
     const safeBrand = (brandName || 'AutoVid AI').replace(/[':]/g, '');
     ffmpeg()
-    .input(videoPath)
-    .input(audioPath)
-    .complexFilter([
+   .input(videoPath)
+   .input(audioPath)
+   .complexFilter([
         '[0:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2[scaled]',
         `[scaled]drawtext=text='${safeBrand}':fontcolor=white:fontsize=32:x=w-tw-40:y=40:box=1:boxcolor=black@0.5:boxborderw=10[outv]`
       ])
-    .outputOptions([
+   .outputOptions([
         '-map [outv]',
         '-map 1:a',
         '-c:v libx264',
         '-preset fast',
         '-crf 23',
         '-c:a aac',
+        '-b:a 192k', // Higher audio bitrate for premium voice
         '-shortest'
       ])
-    .save(outputPath)
-    .on('end', () => {
+   .save(outputPath)
+   .on('end', () => {
         console.log('FFmpeg processing completed');
         resolve();
       })
-    .on('error', (err) => {
+   .on('error', (err) => {
         console.error('FFmpeg error:', err.message);
         reject(err);
       });
@@ -259,5 +262,5 @@ async function uploadToCloudinary(filePath, jobId) {
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
-  console.log(`🚀 AutoVid AI with ElevenLabs Turbo v2.5 running on port ${PORT}`);
+  console.log(`🚀 AutoVid AI with ElevenLabs Multilingual v2 running on port ${PORT}`);
 });
