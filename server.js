@@ -292,32 +292,33 @@ function generateSRT(scenes) {
 
 function stitchVideoPro(images, audio, srt, output, width, height, brand) {
   return new Promise((resolve, reject) => {
-    const img = images[0];
-    const lowW = 480;
-    const lowH = Math.floor(480 * (height/width));
+    // PRO MODE: Use ALL images with 5s each
+    const inputs = images.map(img => `-loop 1 -t 5 -i "${img}"`).join(' ');
 
-    const cmd = `ffmpeg -loop 1 -t 30 -i "${img}" -i "${audio}" ` +
-      `-vf "scale=${lowW}:${lowH}:force_original_aspect_ratio=decrease,pad=${lowW}:${lowH}:(ow-iw)/2:(oh-ih)/2,fps=15,` +
-      `subtitles='${srt}':force_style='FontName=DejaVu Sans,FontSize=14,PrimaryColour=&H00FFFFFF,Outline=1',` +
-      `drawtext=text='${brand}':x=w-tw-10:y=10:fontsize=16:fontcolor=white@0.8" ` +
-      `-c:v libx264 -preset ultrafast -crf 35 -c:a aac -b:a 96k -shortest -y "${output}"`;
+    // 1080p + Ken Burns zoom per scene + 30fps
+    const filterComplex = images.map((_, i) =>
+      `[${i}:v]scale=${width}:${height},zoompan=z='min(zoom+0.0015,1.2)':d=125:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${width}x${height}:fps=30[v${i}]`
+    ).join(';') + ';' +
+    images.map((_, i) => `[v${i}]`).join('') +
+    `concat=n=${images.length}:v=1:a=0[concatenated];` +
+    `[concatenated]subtitles='${srt}':force_style='FontName=DejaVu Sans,FontSize=24,PrimaryColour=&H00FFFFFF,Outline=2'[v]`;
 
-    console.log('Running FFmpeg (FREE TIER 480p MODE)...');
+    const cmd = `ffmpeg ${inputs} -i "${audio}" -filter_complex "${filterComplex}" -map "[v]" -map ${images.length}:a -c:v libx264 -preset medium -crf 23 -c:a aac -b:a 128k -shortest -y "${output}"`;
 
-    const child = exec(cmd, { maxBuffer: 1024 * 50 }, (err, stdout, stderr) => {
+    console.log('Running FFmpeg (PRO MODE - 1080p)...');
+
+    const child = exec(cmd, { maxBuffer: 1024 * 200 }, (err, stdout, stderr) => {
       if (err) {
         console.error('=== FFMPEG FAILED ===');
         console.error('Stderr:', stderr.slice(-500));
         reject(new Error(`FFmpeg failed: ${err.message}`));
       } else {
-        console.log('=== FFMPEG SUCCESS (480p) ===');
+        console.log('=== FFMPEG SUCCESS (1080p) ===');
         resolve();
       }
     });
 
-    child.on('error', (err) => {
-      reject(new Error('FFmpeg failed to start'));
-    });
+    child.on('error', (err) => reject(err));
   });
 }
 
