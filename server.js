@@ -52,13 +52,14 @@ const STYLE_PROMPTS = {
   'realistic': 'Photorealistic style, ultra detailed, 8K, professional photography'
 };
 
+// REPLACE the VOICES object with this:
 const VOICES = {
-  'Nova': 'nova',
-  'Alloy': 'alloy',
-  'Echo': 'echo',
-  'Fable': 'fable',
-  'Onyx': 'onyx',
-  'Shimmer': 'shimmer'
+  'Nova': 'EXAVITQu4vr4xnSDxMaL', // Sarah - Female, professional
+  'Alloy': 'pNInz6obpgDQGcFmaJgB', // Adam - Male, deep
+  'Echo': 'VR6AewLTigWG4xSOukaG', // Josh - Male, young
+  'Fable': 'TxGEqnHWrfWFTfGW9XjX', // Josh alternative
+  'Onyx': 'CYw3kZ02Hs0563khs1Fj', // Dave - Male, conversational
+  'Shimmer': 'jsCqWAovK2LkecY7zXl4' // Freya - Female, warm
 };
 
 // === UTILS ===
@@ -174,13 +175,20 @@ async function generateImages(scenes, style, width, height, jobId) {
 
 // === VOICEOVER GENERATION ===
 async function generateVoiceover(script, voice) {
-  const voiceId = VOICES[voice] || 'nova';
+  const voiceId = VOICES[voice] || VOICES['Nova']; // Default to Sarah
   const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`;
+
+  console.log(`[${voice}] Using ElevenLabs voice ID: ${voiceId}`);
 
   const res = await axios.post(url, {
     text: script,
     model_id: 'eleven_multilingual_v2',
-    voice_settings: { stability: 0.5, similarity_boost: 0.75 }
+    voice_settings: {
+      stability: 0.5,
+      similarity_boost: 0.75,
+      style: 0.0,
+      use_speaker_boost: true
+    }
   }, {
     headers: {
       'xi-api-key': process.env.ELEVENLABS_API_KEY,
