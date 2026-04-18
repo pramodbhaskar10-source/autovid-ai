@@ -13,51 +13,45 @@ app.use(express.json({ limit: '50mb' }));
 
 // ==================== STARTUP CHECKS ====================
 
-// Check FFmpeg on startup - CRITICAL!
 exec('ffmpeg -version', (err, stdout) => {
   if (err) {
     console.error('❌ FATAL: FFmpeg not found! Dockerfile build failed.');
-    console.error('Fix: Check Dockerfile has "apt-get install ffmpeg"');
   } else {
     console.log('✅ FFmpeg OK:', stdout.split('\n')[0]);
   }
 });
 
-// Cloudinary Config
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
-// Replicate Config
 const replicate = new Replicate({
-  auth: process.env.REPLICATE_API_TOKEN,
+  auth: process.env.REPLICATE_API_TOKEN
 });
 
-// Jobs Map
 const jobs = new Map();
 
-// 18 STYLES
 const STYLE_PROMPTS = {
   'Autoshorts V2': 'cinematic, viral short format, dynamic, trending',
   'LEGO': 'lego blocks style, plastic toy, colorful, blocky construction',
-  'Comic Book': 'comic book style, bold ink lines, halftone dots, speech bubbles',
-  'Disney toon': 'disney animation style, magical, vibrant colors, glossy, 3d',
-  'studio Ghibli': 'studio ghibli style, hayao miyazaki, anime, painterly, soft lighting, detailed background',
+  'Comic Book': 'comic book style, bold ink lines, halftone dots',
+  'Disney toon': 'disney animation style, magical, vibrant colors, 3d',
+  'studio Ghibli': 'studio ghibli style, hayao miyazaki, anime, painterly, soft lighting',
   'pixelated': '8-bit pixel art, retro game style, blocky',
   'creepy toon': 'dark cartoon, tim burton style, eerie, gothic',
-  'childrens book': 'children book illustration, soft colors, watercolor, cute',
-  'photo realism': 'photorealistic, 8k uhd, ultra detailed, professional photography',
-  'Minecraft': 'minecraft style, voxel art, blocky 3d, pixelated texture',
-  'watercolor': 'watercolor painting, soft brush strokes, artistic, flowing',
-  'expressionism': 'expressionist painting, bold colors, emotional, abstract',
-  'Charcoal': 'charcoal sketch, black and white, artistic, hand drawn',
-  'Gtav': 'gta v style, realistic game graphics, rockstar, detailed',
-  'Anime': 'anime style, japanese animation, vibrant colors, detailed eyes, manga',
-  'Autoshorts': 'trending short format, fast paced, viral, dynamic',
-  'film noir': 'film noir style, black and white, dramatic shadows, 1940s, detective',
-  '3D toon': '3d cartoon style, pixar, glossy render, subsurface scattering'
+  'childrens book': 'children book illustration, soft colors, watercolor',
+  'photo realism': 'photorealistic, 8k uhd, ultra detailed',
+  'Minecraft': 'minecraft style, voxel art, blocky 3d',
+  'watercolor': 'watercolor painting, soft brush strokes, artistic',
+  'expressionism': 'expressionist painting, bold colors, emotional',
+  'Charcoal': 'charcoal sketch, black and white, artistic',
+  'Gtav': 'gta v style, realistic game graphics',
+  'Anime': 'anime style, japanese animation, vibrant colors',
+  'Autoshorts': 'trending short format, fast paced, viral',
+  'film noir': 'film noir style, black and white, dramatic shadows',
+  '3D toon': '3d cartoon style, pixar, glossy render'
 };
 
 const ASPECT_RATIOS = {
@@ -82,10 +76,9 @@ const DURATION_SCENES = {
 
 // ==================== ROUTES ====================
 
-// Root
 app.get('/', (req, res) => {
   res.json({
-    message: 'AutoVid AI Pro API v2.0 - FacelessReels.com Killer',
+    message: 'AutoVid AI Pro API v2.0',
     status: 'operational',
     endpoints: {
       health: 'GET /health',
@@ -95,7 +88,6 @@ app.get('/', (req, res) => {
   });
 });
 
-// Health Check
 app.get('/health', (req, res) => {
   res.json({
     status: 'alive',
@@ -109,14 +101,13 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Start Video Generation
 app.post('/api/generate-pro', (req, res) => {
   try {
     const jobId = `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    const { topic, style, voice, aspectRatio, duration, language, brandName } = req.body;
+    const { topic, style, voice, aspectRatio, duration } = req.body;
 
     if (!topic ||!style ||!voice ||!aspectRatio ||!duration) {
-      return res.status(400).json({ error: 'Missing required fields: topic, style, voice, aspectRatio, duration' });
+      return res.status(400).json({ error: 'Missing required fields' });
     }
 
     console.log(`[${jobId}] Job queued:`, { topic, style, voice, duration });
@@ -127,7 +118,6 @@ app.post('/api/generate-pro', (req, res) => {
       params: req.body
     });
 
-    // Detach completely - no await
     setImmediate(() => {
       processVideoJobPro(jobId, req.body).catch(err => {
         console.error(`[${jobId}] FATAL ERROR:`, err);
@@ -151,7 +141,6 @@ app.post('/api/generate-pro', (req, res) => {
   }
 });
 
-// Check Job Status
 app.get('/api/status/:jobId', (req, res) => {
   const job = jobs.get(req.params.jobId);
   if (!job) {
@@ -171,20 +160,18 @@ async function processVideoJobPro(jobId, params) {
     await fs.mkdir(workDir, { recursive: true });
     console.log(`[${jobId}] Workdir: ${workDir}`);
 
-    // STEP 1: Script
     job.status = 'scripting'; job.progress = 10; jobs.set(jobId, {...job});
-    const sceneCount = DURATION_SCENES[duration] || 6;
+    const sceneCount = DURATION_SCENES[duration] || 1;
     console.log(`[${jobId}] Generating ${sceneCount} scenes`);
     const scenes = await generateScenes(topic, sceneCount, language);
 
-    // STEP 2: Images
     job.status = 'generating_images'; job.progress = 20; jobs.set(jobId, {...job});
     const { width, height } = ASPECT_RATIOS[aspectRatio];
     const imageFiles = [];
 
     for (let i = 0; i < scenes.length; i++) {
       console.log(`[${jobId}] Image ${i+1}/${scenes.length}`);
-      const imagePrompt = `${scenes[i]}, ${STYLE_PROMPTS[style]}, high quality, detailed, 8k, no text, no watermark`;
+      const imagePrompt = `${scenes[i]}, ${STYLE_PROMPTS[style]}, high quality, detailed, no text, no watermark`;
 
       const output = await replicate.run(
         "stability-ai/sdxl:39ed52f2a78e934b3ba6e2a89f5b1c712de7dfea535525255b1aa35c5565e08b",
@@ -194,8 +181,7 @@ async function processVideoJobPro(jobId, params) {
             width,
             height,
             num_outputs: 1,
-            num_inference_steps: 25,
-            scheduler: "K_EULER"
+            num_inference_steps: 25
           }
         }
       );
@@ -209,7 +195,6 @@ async function processVideoJobPro(jobId, params) {
       jobs.set(jobId, {...job});
     }
 
-    // STEP 3: Voiceover
     job.status = 'voiceover'; job.progress = 55; jobs.set(jobId, {...job});
     const fullScript = scenes.map(s => s.replace(/^Scene \d+:\s*/, '')).join('. ');
     console.log(`[${jobId}] Voiceover with ${voice}`);
@@ -219,7 +204,7 @@ async function processVideoJobPro(jobId, params) {
       {
         text: fullScript,
         model_id: "eleven_multilingual_v2",
-        voice_settings: { stability: 0.5, similarity_boost: 0.75, style: 0.5 }
+        voice_settings: { stability: 0.5, similarity_boost: 0.75 }
       },
       {
         headers: { 'xi-api-key': process.env.ELEVENLABS_API_KEY },
@@ -230,19 +215,16 @@ async function processVideoJobPro(jobId, params) {
     const audioPath = path.join(workDir, 'voiceover.mp3');
     await fs.writeFile(audioPath, audioRes.data);
 
-    // STEP 4: Captions
     job.status = 'captions'; job.progress = 65; jobs.set(jobId, {...job});
     const srtPath = path.join(workDir, 'captions.srt');
     await fs.writeFile(srtPath, generateSRT(scenes));
     console.log(`[${jobId}] Captions done`);
 
-    // STEP 5: Render Video - MEMORY OPTIMIZED
     job.status = 'rendering'; job.progress = 75; jobs.set(jobId, {...job});
     const outputPath = path.join(workDir, 'final.mp4');
     console.log(`[${jobId}] Rendering with FFmpeg`);
     await stitchVideoPro(imageFiles, audioPath, srtPath, outputPath, width, height, brandName);
 
-    // STEP 6: Upload
     job.status = 'uploading'; job.progress = 90; jobs.set(jobId, {...job});
     console.log(`[${jobId}] Uploading to Cloudinary`);
     const uploadRes = await cloudinary.uploader.upload(outputPath, {
@@ -252,7 +234,6 @@ async function processVideoJobPro(jobId, params) {
       overwrite: true
     });
 
-    // COMPLETE
     job.status = 'completed';
     job.progress = 100;
     job.result = {
@@ -264,7 +245,6 @@ async function processVideoJobPro(jobId, params) {
     jobs.set(jobId, {...job});
     console.log(`[${jobId}] COMPLETED: ${uploadRes.secure_url}`);
 
-    // Cleanup
     await fs.rm(workDir, { recursive: true, force: true });
 
   } catch (err) {
@@ -283,7 +263,7 @@ async function generateScenes(topic, count, language) {
     model: 'gpt-4o-mini',
     messages: [{
       role: 'user',
-      content: `Create ${count} visual scene descriptions for a ${language} faceless YouTube short about "${topic}". Each scene is 5 seconds. Format: Scene 1: [vivid visual description]. Only return the scenes, numbered. No intro or outro.`
+      content: `Create ${count} visual scene descriptions for a ${language} faceless YouTube short about "${topic}". Each scene is 5 seconds. Format: Scene 1: [vivid visual description]. Only return the scenes, numbered.`
     }],
     temperature: 0.8
   }, {
@@ -312,14 +292,10 @@ function generateSRT(scenes) {
 
 function stitchVideoPro(images, audio, srt, output, width, height, brand) {
   return new Promise((resolve, reject) => {
-    // FREE TIER HACK: Use only FIRST image for 30s video
     const img = images[0];
-    
-    // DOWNSCALE to 480p - saves 75% RAM
     const lowW = 480;
     const lowH = Math.floor(480 * (height/width));
 
-    // Simple FFmpeg - no zoom, no complex filters = less RAM
     const cmd = `ffmpeg -loop 1 -t 30 -i "${img}" -i "${audio}" ` +
       `-vf "scale=${lowW}:${lowH}:force_original_aspect_ratio=decrease,pad=${lowW}:${lowH}:(ow-iw)/2:(oh-ih)/2,fps=15,` +
       `subtitles='${srt}':force_style='FontName=DejaVu Sans,FontSize=14,PrimaryColour=&H00FFFFFF,Outline=1',` +
@@ -345,16 +321,6 @@ function stitchVideoPro(images, audio, srt, output, width, height, brand) {
   });
 }
 
-    child.on('error', (err) => {
-      console.error('=== FFMPEG SPAWN ERROR ===');
-      console.error('FFmpeg not found or failed to start:', err);
-      reject(new Error('FFmpeg not installed. Check Dockerfile.'));
-    });
-  });
-}
-
-// ==================== ERROR HANDLERS ====================
-
 process.on('uncaughtException', (err) => {
   console.error('UNCAUGHT EXCEPTION:', err);
 });
@@ -362,8 +328,6 @@ process.on('uncaughtException', (err) => {
 process.on('unhandledRejection', (err) => {
   console.error('UNHANDLED REJECTION:', err);
 });
-
-// ==================== START SERVER ====================
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, '0.0.0.0', () => {
