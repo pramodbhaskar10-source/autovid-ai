@@ -1,3 +1,5 @@
+const FormData = require('form-data');
+const { Blob } = require('buffer');
 const express = require('express');
 const cors = require('cors');
 const { exec } = require('child_process');
@@ -202,20 +204,28 @@ async function generateVoiceover(script, voice) {
 }
 
 // === CAPTIONS WITH WHISPER ===
-async function generateCaptions(audioPath) {
+async function generateCaptions(audioPath, jobId) {
+  console.log(`[${jobId}] Generating captions with Whisper...`);
+  
   const audioFile = await fs.readFile(audioPath);
-
+  const FormData = require('form-data');
   const formData = new FormData();
-  formData.append('file', new Blob([audioFile]), 'audio.mp3');
+  
+  formData.append('file', audioFile, {
+    filename: 'audio.mp3',
+    contentType: 'audio/mpeg'
+  });
   formData.append('model', 'whisper-1');
   formData.append('response_format', 'srt');
 
   const res = await axios.post('https://api.openai.com/v1/audio/transcriptions', formData, {
     headers: {
       'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-     ...formData.getHeaders()
+      ...formData.getHeaders()
     },
-    timeout: 120000
+    timeout: 120000,
+    maxBodyLength: Infinity,
+    maxContentLength: Infinity
   });
 
   return res.data;
@@ -307,7 +317,7 @@ app.post('/api/generate-pro', async (req, res) => {
       job.progress = 70;
       JOBS.set(jobId, {...job});
       console.log(`[${jobId}] Generating captions...`);
-      const srtContent = await generateCaptions(audioPath);
+      const srtContent = await generateCaptions(audioPath, jobId););
       const srtPath = path.join(jobWorkDir, 'captions.srt');
       await fs.writeFile(srtPath, srtContent);
 
