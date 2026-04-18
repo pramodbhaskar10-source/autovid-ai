@@ -312,34 +312,38 @@ function generateSRT(scenes) {
 
 function stitchVideoPro(images, audio, srt, output, width, height, brand) {
   return new Promise((resolve, reject) => {
-    const inputs = images.map(img => `-loop 1 -t 5 -i "${img}"`).join(' ');
+    // FREE TIER HACK: Use only FIRST image for 30s video
+    const img = images[0];
+    
+    // DOWNSCALE to 480p - saves 75% RAM
+    const lowW = 480;
+    const lowH = Math.floor(480 * (height/width));
 
-    // SIMPLIFIED FILTER - Less memory intensive
-    const filterComplex = images.map((_, i) =>
-      `[${i}:v]scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,` +
-      `setsar=1,fps=30[v${i}]`
-    ).join(';') + ';' +
-    images.map((_, i) => `[v${i}]`).join('') +
-    `concat=n=${images.length}:v=1:a=0[concatenated];` +
-    `[concatenated]subtitles='${srt}':force_style='FontName=DejaVu Sans,FontSize=24,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,Outline=2'[subbed];` +
-    `[subbed]drawtext=text='${brand}':x=w-tw-20:y=20:fontsize=32:fontcolor=white@0.8:shadowcolor=black@0.5:shadowx=2:shadowy=2[v]`;
+    // Simple FFmpeg - no zoom, no complex filters = less RAM
+    const cmd = `ffmpeg -loop 1 -t 30 -i "${img}" -i "${audio}" ` +
+      `-vf "scale=${lowW}:${lowH}:force_original_aspect_ratio=decrease,pad=${lowW}:${lowH}:(ow-iw)/2:(oh-ih)/2,fps=15,` +
+      `subtitles='${srt}':force_style='FontName=DejaVu Sans,FontSize=14,PrimaryColour=&H00FFFFFF,Outline=1',` +
+      `drawtext=text='${brand}':x=w-tw-10:y=10:fontsize=16:fontcolor=white@0.8" ` +
+      `-c:v libx264 -preset ultrafast -crf 35 -c:a aac -b:a 96k -shortest -y "${output}"`;
 
-    // ULTRAFAST + Lower quality = Less RAM
-    const cmd = `ffmpeg ${inputs} -i "${audio}" -filter_complex "${filterComplex}" -map "[v]" -map ${images.length}:a -c:v libx264 -preset ultrafast -crf 30 -c:a aac -b:a 128k -shortest -y "${output}"`;
+    console.log('Running FFmpeg (FREE TIER 480p MODE)...');
 
-    console.log('Running FFmpeg...');
-
-    const child = exec(cmd, { maxBuffer: 1024 * 200 }, (err, stdout, stderr) => {
+    const child = exec(cmd, { maxBuffer: 1024 * 50 }, (err, stdout, stderr) => {
       if (err) {
         console.error('=== FFMPEG FAILED ===');
-        console.error('Error:', err.message);
-        console.error('Stderr:', stderr.slice(-1000)); // Last 1000 chars
+        console.error('Stderr:', stderr.slice(-500));
         reject(new Error(`FFmpeg failed: ${err.message}`));
       } else {
-        console.log('=== FFMPEG SUCCESS ===');
+        console.log('=== FFMPEG SUCCESS (480p) ===');
         resolve();
       }
     });
+
+    child.on('error', (err) => {
+      reject(new Error('FFmpeg failed to start'));
+    });
+  });
+}
 
     child.on('error', (err) => {
       console.error('=== FFMPEG SPAWN ERROR ===');
