@@ -1,22 +1,20 @@
 {
-  "name": "autovid-ai",
-  "version": "2.0.0",
-  "description": "AutoVid AI - FacelessReels.com + AutoShorts.ai Killer",
+  "name": "autovid-ai-pro",
+  "version": "1.0.0",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
-  },
-  "engines": {
-    "node": "18.x"
   },
   "dependencies": {
     "express": "^4.18.2",
     "cors": "^2.8.5",
     "axios": "^1.6.0",
-    "cloudinary": "^1.41.0",
-    "dotenv": "^16.3.1",
-    "replicate": "^0.29.1",
-    "openai": "^4.20.0"
+    "replicate": "^0.25.2",
+    "openai": "^4.28.0",
+    "cloudinary": "^2.0.0",
     "form-data": "^4.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
