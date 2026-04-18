@@ -11,13 +11,13 @@ RUN apt-get update && \
 WORKDIR /app
 
 # Copy package files first - better caching
-COPY package*.json./
+COPY package*.json ./
 
 # Install Node dependencies
 RUN npm install --production
 
 # Copy rest of code
-COPY..
+COPY . .
 
 # Expose port - Render auto-sets PORT env var
 EXPOSE 10000
