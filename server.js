@@ -220,21 +220,20 @@ function stitchVideoPro(images, audio, srt, output, width, height, brand) {
   return new Promise((resolve, reject) => {
     const inputs = images.map(img => `-loop 1 -t 5 -i "${img}"`).join(' ');
 
-    // Ken Burns zoom + concat + subtitles + watermark
+    // Ken Burns zoom + concat ONLY - NO SUBTITLES
     const filterComplex = images.map((_, i) =>
       `[${i}:v]scale=${width}:${height}:force_original_aspect_ratio=decrease,` +
       `pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,` +
-      `zoompan=z='min(zoom+0.0015,1.2)':d=125:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${width}x${height}:fps=30[v${i}]`
+      `zoompan=z='min(zoom+0.0015,1.2)':d=150:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${width}x${height}:fps=30[v${i}]`
     ).join(';') + ';' +
     images.map((_, i) => `[v${i}]`).join('') +
-    `concat=n=${images.length}:v=1:a=0[concatenated];` +
-    `[concatenated]subtitles='${srt}':force_style='FontName=DejaVu Sans,FontSize=24,PrimaryColour=&H00FFFFFF,Outline=2,Bold=1'[v]`;
+    `concat=n=${images.length}:v=1:a=0[v]`;
 
     const cmd = `ffmpeg ${inputs} -i "${audio}" -filter_complex "${filterComplex}" ` +
       `-map "[v]" -map ${images.length}:a ` +
       `-c:v libx264 -preset medium -crf 23 -c:a aac -b:a 128k -shortest -y "${output}"`;
 
-    console.log('Running FFmpeg (PRO MODE - 1080p)...');
+    console.log('Running FFmpeg (PRO MODE - NO CAPTIONS)...');
 
     const child = exec(cmd, { maxBuffer: 1024 * 500 }, (err, stdout, stderr) => {
       if (err) {
