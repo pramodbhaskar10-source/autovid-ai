@@ -11,6 +11,18 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 
+// ==================== STARTUP CHECKS ====================
+
+// Check FFmpeg on startup - CRITICAL!
+exec('ffmpeg -version', (err, stdout) => {
+  if (err) {
+    console.error('❌ FATAL: FFmpeg not found! Dockerfile build failed.');
+    console.error('Fix: Check Dockerfile has "apt-get install ffmpeg"');
+  } else {
+    console.log('✅ FFmpeg OK:', stdout.split('\n')[0]);
+  }
+});
+
 // Cloudinary Config
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -23,10 +35,10 @@ const replicate = new Replicate({
   auth: process.env.REPLICATE_API_TOKEN,
 });
 
-// Jobs Map - In-memory store
+// Jobs Map
 const jobs = new Map();
 
-// 18 STYLES - FacelessReels.com Killer
+// 18 STYLES
 const STYLE_PROMPTS = {
   'Autoshorts V2': 'cinematic, viral short format, dynamic, trending',
   'LEGO': 'lego blocks style, plastic toy, colorful, blocky construction',
@@ -54,7 +66,6 @@ const ASPECT_RATIOS = {
   'square': { width: 1080, height: 1080 }
 };
 
-// 6 VOICES
 const VOICE_MAP = {
   'Echo': 'EXAVITQu4vr4xnSDxMaL',
   'Alloy': 'XB0fDUnXU5powFXDhCwa',
@@ -64,15 +75,27 @@ const VOICE_MAP = {
   'Shimmer': 'jBpfuIE2acCO8z3wKNLl'
 };
 
-// Duration to scenes mapping
 const DURATION_SCENES = {
-  '30s': 6, '1min': 12, '2min': 24, '3min': 36,
+  '5s': 1, '30s': 6, '1min': 12, '2min': 24, '3min': 36,
   '5min': 60, '10min': 120, '15min': 180, '20min': 240
 };
 
 // ==================== ROUTES ====================
 
-// Health Check - Test this first!
+// Root
+app.get('/', (req, res) => {
+  res.json({
+    message: 'AutoVid AI Pro API v2.0 - FacelessReels.com Killer',
+    status: 'operational',
+    endpoints: {
+      health: 'GET /health',
+      generate: 'POST /api/generate-pro',
+      status: 'GET /api/status/:jobId'
+    }
+  });
+});
+
+// Health Check
 app.get('/health', (req, res) => {
   res.json({
     status: 'alive',
@@ -86,13 +109,12 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Start Video Generation - Returns immediately!
+// Start Video Generation
 app.post('/api/generate-pro', (req, res) => {
   try {
     const jobId = `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const { topic, style, voice, aspectRatio, duration, language, brandName } = req.body;
 
-    // Validate inputs
     if (!topic ||!style ||!voice ||!aspectRatio ||!duration) {
       return res.status(400).json({ error: 'Missing required fields: topic, style, voice, aspectRatio, duration' });
     }
@@ -105,26 +127,27 @@ app.post('/api/generate-pro', (req, res) => {
       params: req.body
     });
 
-    // Start background job - NO AWAIT! This is key!
-    processVideoJobPro(jobId, req.body).catch(err => {
-      console.error(`[${jobId}] Job failed:`, err);
-      jobs.set(jobId, {
-        status: 'failed',
-        error: err.message,
-        progress: 0
+    // Detach completely - no await
+    setImmediate(() => {
+      processVideoJobPro(jobId, req.body).catch(err => {
+        console.error(`[${jobId}] FATAL ERROR:`, err);
+        jobs.set(jobId, {
+          status: 'failed',
+          error: err.message || 'Unknown error',
+          progress: 0
+        });
       });
     });
 
-    // Return immediately - under 100ms
     res.json({
       jobId,
       status: 'queued',
-      message: 'Faceless video generation started. Poll /api/status/:jobId for updates.'
+      message: 'Video generation started'
     });
 
   } catch (err) {
-    console.error('Error in /api/generate-pro:', err);
-    res.status(500).json({ error: err.message });
+    console.error('CRASH in /api/generate-pro:', err);
+    res.status(500).json({ error: 'Server error: ' + err.message });
   }
 });
 
@@ -134,10 +157,7 @@ app.get('/api/status/:jobId', (req, res) => {
   if (!job) {
     return res.status(404).json({ error: 'Job not found' });
   }
-  res.json({
-    jobId: req.params.jobId,
-   ...job
-  });
+  res.json({ jobId: req.params.jobId,...job });
 });
 
 // ==================== BACKGROUND JOB ====================
@@ -149,23 +169,21 @@ async function processVideoJobPro(jobId, params) {
 
   try {
     await fs.mkdir(workDir, { recursive: true });
-    console.log(`[${jobId}] Workdir created: ${workDir}`);
+    console.log(`[${jobId}] Workdir: ${workDir}`);
 
-    // STEP 1: Split script into scenes
-    job.status = 'scripting'; job.progress = 10;
-    jobs.set(jobId, {...job});
-    const sceneCount = DURATION_SCENES[duration] || 12;
-    console.log(`[${jobId}] Generating ${sceneCount} scenes for topic: ${topic}`);
+    // STEP 1: Script
+    job.status = 'scripting'; job.progress = 10; jobs.set(jobId, {...job});
+    const sceneCount = DURATION_SCENES[duration] || 6;
+    console.log(`[${jobId}] Generating ${sceneCount} scenes`);
     const scenes = await generateScenes(topic, sceneCount, language);
 
-    // STEP 2: Generate AI images for each scene
-    job.status = 'generating_images'; job.progress = 20;
-    jobs.set(jobId, {...job});
+    // STEP 2: Images
+    job.status = 'generating_images'; job.progress = 20; jobs.set(jobId, {...job});
     const { width, height } = ASPECT_RATIOS[aspectRatio];
     const imageFiles = [];
 
     for (let i = 0; i < scenes.length; i++) {
-      console.log(`[${jobId}] Generating image ${i+1}/${scenes.length}`);
+      console.log(`[${jobId}] Image ${i+1}/${scenes.length}`);
       const imagePrompt = `${scenes[i]}, ${STYLE_PROMPTS[style]}, high quality, detailed, 8k, no text, no watermark`;
 
       const output = await replicate.run(
@@ -176,14 +194,14 @@ async function processVideoJobPro(jobId, params) {
             width,
             height,
             num_outputs: 1,
-            num_inference_steps: 30,
+            num_inference_steps: 25,
             scheduler: "K_EULER"
           }
         }
       );
 
       const imgPath = path.join(workDir, `scene_${i}.png`);
-      const imgRes = await axios.get(output[0], { responseType: 'arraybuffer' });
+      const imgRes = await axios.get(output[0], { responseType: 'arraybuffer', timeout: 30000 });
       await fs.writeFile(imgPath, imgRes.data);
       imageFiles.push(imgPath);
 
@@ -191,11 +209,10 @@ async function processVideoJobPro(jobId, params) {
       jobs.set(jobId, {...job});
     }
 
-    // STEP 3: Generate voiceover
-    job.status = 'voiceover'; job.progress = 55;
-    jobs.set(jobId, {...job});
+    // STEP 3: Voiceover
+    job.status = 'voiceover'; job.progress = 55; jobs.set(jobId, {...job});
     const fullScript = scenes.map(s => s.replace(/^Scene \d+:\s*/, '')).join('. ');
-    console.log(`[${jobId}] Generating voiceover with ${voice}`);
+    console.log(`[${jobId}] Voiceover with ${voice}`);
 
     const audioRes = await axios.post(
       `https://api.elevenlabs.io/v1/text-to-speech/${VOICE_MAP[voice]}`,
@@ -213,29 +230,25 @@ async function processVideoJobPro(jobId, params) {
     const audioPath = path.join(workDir, 'voiceover.mp3');
     await fs.writeFile(audioPath, audioRes.data);
 
-    // STEP 4: Generate captions SRT
-    job.status = 'captions'; job.progress = 65;
-    jobs.set(jobId, {...job});
+    // STEP 4: Captions
+    job.status = 'captions'; job.progress = 65; jobs.set(jobId, {...job});
     const srtPath = path.join(workDir, 'captions.srt');
-    const srtContent = generateSRT(scenes, sceneCount);
-    await fs.writeFile(srtPath, srtContent);
-    console.log(`[${jobId}] Captions generated`);
+    await fs.writeFile(srtPath, generateSRT(scenes));
+    console.log(`[${jobId}] Captions done`);
 
-    // STEP 5: Stitch video with Ken Burns + Captions
-    job.status = 'rendering'; job.progress = 75;
-    jobs.set(jobId, {...job});
+    // STEP 5: Render Video - MEMORY OPTIMIZED
+    job.status = 'rendering'; job.progress = 75; jobs.set(jobId, {...job});
     const outputPath = path.join(workDir, 'final.mp4');
-    console.log(`[${jobId}] Rendering video with FFmpeg`);
+    console.log(`[${jobId}] Rendering with FFmpeg`);
     await stitchVideoPro(imageFiles, audioPath, srtPath, outputPath, width, height, brandName);
 
-    // STEP 6: Upload to Cloudinary
-    job.status = 'uploading'; job.progress = 90;
-    jobs.set(jobId, {...job});
+    // STEP 6: Upload
+    job.status = 'uploading'; job.progress = 90; jobs.set(jobId, {...job});
     console.log(`[${jobId}] Uploading to Cloudinary`);
     const uploadRes = await cloudinary.uploader.upload(outputPath, {
       resource_type: 'video',
       folder: 'autovid',
-      public_id: `${jobId}_${style}_${voice}`.replace(/\s+/g, '_'),
+      public_id: `${jobId}_${style}`.replace(/\s+/g, '_'),
       overwrite: true
     });
 
@@ -244,10 +257,7 @@ async function processVideoJobPro(jobId, params) {
     job.progress = 100;
     job.result = {
       videoUrl: uploadRes.secure_url,
-      style,
-      voice,
-      aspectRatio,
-      duration,
+      style, voice, aspectRatio, duration,
       scenes: sceneCount,
       completedAt: new Date().toISOString()
     };
@@ -256,18 +266,13 @@ async function processVideoJobPro(jobId, params) {
 
     // Cleanup
     await fs.rm(workDir, { recursive: true, force: true });
-    console.log(`[${jobId}] Cleanup done`);
 
   } catch (err) {
     console.error(`[${jobId}] ERROR:`, err);
     job.status = 'failed';
     job.error = err.message;
     jobs.set(jobId, {...job});
-
-    // Cleanup on error
-    try {
-      await fs.rm(workDir, { recursive: true, force: true });
-    } catch (e) {}
+    try { await fs.rm(workDir, { recursive: true, force: true }); } catch (e) {}
   }
 }
 
@@ -278,19 +283,17 @@ async function generateScenes(topic, count, language) {
     model: 'gpt-4o-mini',
     messages: [{
       role: 'user',
-      content: `Create ${count} visual scene descriptions for a ${language} faceless YouTube short about "${topic}". Each scene is 5 seconds. Format: Scene 1: [vivid visual description]. Only return the scenes, numbered. No intro or outro text.`
+      content: `Create ${count} visual scene descriptions for a ${language} faceless YouTube short about "${topic}". Each scene is 5 seconds. Format: Scene 1: [vivid visual description]. Only return the scenes, numbered. No intro or outro.`
     }],
     temperature: 0.8
   }, {
     headers: { 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` },
     timeout: 30000
   });
-
-  const content = res.data.choices[0].message.content;
-  return content.split('\n').filter(s => s.trim().match(/^Scene \d+:/)).slice(0, count);
+  return res.data.choices[0].message.content.split('\n').filter(s => s.trim().match(/^Scene \d+:/)).slice(0, count);
 }
 
-function generateSRT(scenes, count) {
+function generateSRT(scenes) {
   let srt = '';
   scenes.forEach((scene, i) => {
     const start = i * 5;
@@ -311,35 +314,54 @@ function stitchVideoPro(images, audio, srt, output, width, height, brand) {
   return new Promise((resolve, reject) => {
     const inputs = images.map(img => `-loop 1 -t 5 -i "${img}"`).join(' ');
 
+    // SIMPLIFIED FILTER - Less memory intensive
     const filterComplex = images.map((_, i) =>
       `[${i}:v]scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,` +
-      `zoompan=z='min(zoom+0.0015,1.5)':d=125:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)',` +
       `setsar=1,fps=30[v${i}]`
     ).join(';') + ';' +
     images.map((_, i) => `[v${i}]`).join('') +
     `concat=n=${images.length}:v=1:a=0[concatenated];` +
-    `[concatenated]subtitles='${srt}':force_style='FontSize=28,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,Outline=2'[subbed];` +
+    `[concatenated]subtitles='${srt}':force_style='FontName=DejaVu Sans,FontSize=24,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,Outline=2'[subbed];` +
     `[subbed]drawtext=text='${brand}':x=w-tw-20:y=20:fontsize=32:fontcolor=white@0.8:shadowcolor=black@0.5:shadowx=2:shadowy=2[v]`;
 
-    const cmd = `ffmpeg ${inputs} -i "${audio}" -filter_complex "${filterComplex}" -map "[v]" -map ${images.length}:a -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 128k -shortest -y "${output}"`;
+    // ULTRAFAST + Lower quality = Less RAM
+    const cmd = `ffmpeg ${inputs} -i "${audio}" -filter_complex "${filterComplex}" -map "[v]" -map ${images.length}:a -c:v libx264 -preset ultrafast -crf 30 -c:a aac -b:a 128k -shortest -y "${output}"`;
 
     console.log('Running FFmpeg...');
-    exec(cmd, { maxBuffer: 1024 * 1024 * 10 }, (err, stdout, stderr) => {
+
+    const child = exec(cmd, { maxBuffer: 1024 * 200 }, (err, stdout, stderr) => {
       if (err) {
-        console.error('FFmpeg error:', stderr);
+        console.error('=== FFMPEG FAILED ===');
+        console.error('Error:', err.message);
+        console.error('Stderr:', stderr.slice(-1000)); // Last 1000 chars
         reject(new Error(`FFmpeg failed: ${err.message}`));
       } else {
-        console.log('FFmpeg success');
+        console.log('=== FFMPEG SUCCESS ===');
         resolve();
       }
+    });
+
+    child.on('error', (err) => {
+      console.error('=== FFMPEG SPAWN ERROR ===');
+      console.error('FFmpeg not found or failed to start:', err);
+      reject(new Error('FFmpeg not installed. Check Dockerfile.'));
     });
   });
 }
 
+// ==================== ERROR HANDLERS ====================
+
+process.on('uncaughtException', (err) => {
+  console.error('UNCAUGHT EXCEPTION:', err);
+});
+
+process.on('unhandledRejection', (err) => {
+  console.error('UNHANDLED REJECTION:', err);
+});
+
 // ==================== START SERVER ====================
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`AutoVid AI Pro running on ${PORT}`);
-  console.log(`Health check: http://localhost:${PORT}/health`);
 });
