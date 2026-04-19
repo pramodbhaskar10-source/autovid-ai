@@ -7,7 +7,7 @@ const { v2: cloudinary } = require('cloudinary');
 const { exec } = require('child_process');
 const fs = require('fs').promises;
 const path = require('path');
-const Stripe = require('stripe');
+const Razorpay = require('razorpay');
 
 const app = express();
 app.use(cors());
@@ -21,13 +21,16 @@ const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
 const CLOUDINARY_CLOUD_NAME = process.env.CLOUDINARY_CLOUD_NAME;
 const CLOUDINARY_API_KEY = process.env.CLOUDINARY_API_KEY;
 const CLOUDINARY_API_SECRET = process.env.CLOUDINARY_API_SECRET;
-const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
-const STRIPE_PRICE_ID = process.env.STRIPE_PRICE_ID;
+const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID;
+const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
 const MASTER_KEY = process.env.MASTER_KEY;
 
 const replicate = new Replicate({ auth: REPLICATE_API_TOKEN });
 const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
-const stripe = new Stripe(STRIPE_SECRET_KEY);
+const razorpay = new Razorpay({
+  key_id: RAZORPAY_KEY_ID,
+  key_secret: RAZORPAY_KEY_SECRET,
+});
 
 cloudinary.config({
   cloud_name: CLOUDINARY_CLOUD_NAME,
@@ -124,7 +127,7 @@ async function generateImage(prompt, style, jobId) {
     { input: { prompt: fullPrompt, negative_prompt: "blurry, low quality, text, watermark" } }
   );
 
-  await sleep(2000); // Rate limit protection
+  await sleep(2000);
   return output[0];
 }
 
@@ -196,12 +199,10 @@ async function generateVideoPro(params, jobId) {
   JOBS.set(jobId, job);
 
   try {
-    // 1. Scenes
     job.progress = 10;
     JOBS.set(jobId, {...job});
     const scenes = await generateScenes(topic, duration.replace('min', ''), style, jobId);
 
-    // 2. Images
     job.progress = 20;
     JOBS.set(jobId, {...job});
     const imagePaths = [];
@@ -216,7 +217,6 @@ async function generateVideoPro(params, jobId) {
       JOBS.set(jobId, {...job});
     }
 
-    // 3. Voice
     job.progress = 65;
     JOBS.set(jobId, {...job});
     const fullNarration = scenes.map(s => s.narration).join(' ');
@@ -224,21 +224,18 @@ async function generateVideoPro(params, jobId) {
     const audioPath = path.join(jobWorkDir, 'audio.mp3');
     await fs.writeFile(audioPath, audioBuffer);
 
-    // 4. Captions
     job.progress = 75;
     JOBS.set(jobId, {...job});
     const srtContent = await generateCaptions(audioPath, jobId);
     const srtPath = path.join(jobWorkDir, 'captions.srt');
     await fs.writeFile(srtPath, srtContent);
 
-    // 5. Stitch
     job.progress = 85;
     JOBS.set(jobId, {...job});
     const { width, height } = getDimensions(aspectRatio);
     const videoPath = path.join(jobWorkDir, 'final.mp4');
     await stitchVideoPro(imagePaths, audioPath, srtPath, videoPath, width, height, brandName || 'PramodAI');
 
-    // 6. Upload
     job.progress = 95;
     JOBS.set(jobId, {...job});
     const upload = await cloudinary.uploader.upload(videoPath, {
@@ -260,7 +257,7 @@ async function generateVideoPro(params, jobId) {
 
 // ===== ROUTES =====
 app.get('/', (req, res) => {
-  res.json({ status: 'AutoVid AI Pro Backend v1.0', docs: '/api' });
+  res.json({ status: 'AutoVid AI Pro Backend v1.0 - Razorpay', docs: '/api' });
 });
 
 app.get('/api', (req, res) => {
@@ -268,7 +265,8 @@ app.get('/api', (req, res) => {
     endpoints: {
       'POST /api/generate-pro': 'Generate video (requires x-api-key)',
       'GET /api/status/:jobId': 'Check job status',
-      'POST /api/create-checkout': 'Create Stripe checkout',
+      'POST /api/create-order': 'Create Razorpay order',
+      'POST /api/verify-payment': 'Verify payment',
       'GET /api/me': 'Check credits'
     }
   });
@@ -281,9 +279,7 @@ app.get('/api/me', (req, res) => {
 app.post('/api/generate-pro', async (req, res) => {
   const jobId = `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   JOBS.set(jobId, { id: jobId, status: 'queued', progress: 0 });
-
-  generateVideoPro(req.body, jobId); // Async
-
+  generateVideoPro(req.body, jobId);
   res.json({ jobId, status: 'queued' });
 });
 
@@ -293,21 +289,41 @@ app.get('/api/status/:jobId', (req, res) => {
   res.json(job);
 });
 
-app.post('/api/create-checkout', async (req, res) => {
+// ===== RAZORPAY ROUTES =====
+app.post('/api/create-order', async (req, res) => {
   try {
-    const session = await stripe.checkout.sessions.create({
-      mode: 'subscription',
-      line_items: [{
-        price: STRIPE_PRICE_ID,
-        quantity: 1,
-      }],
-      success_url: 'https://www.autovidpro.in/dashboard?success=true',
-      cancel_url: 'https://www.autovidpro.in/pricing?canceled=true',
-      allow_promotion_codes: true,
+    const options = {
+      amount: 240000, // ₹2400 in paise = ₹2400
+      currency: 'INR',
+      receipt: 'rcpt_' + Date.now(),
+      notes: { plan: 'pro_monthly' }
+    };
+    const order = await razorpay.orders.create(options);
+    res.json({
+      orderId: order.id,
+      amount: order.amount,
+      currency: order.currency,
+      keyId: RAZORPAY_KEY_ID
     });
-    res.json({ url: session.url });
   } catch (e) {
     res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/verify-payment', async (req, res) => {
+  const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+  const crypto = require('crypto');
+  const sign = razorpay_order_id + '|' + razorpay_payment_id;
+  const expectedSign = crypto
+   .createHmac('sha256', RAZORPAY_KEY_SECRET)
+   .update(sign.toString())
+   .digest('hex');
+
+  if (razorpay_signature === expectedSign) {
+    // Payment verified - activate user here
+    res.json({ success: true, message: 'Payment verified' });
+  } else {
+    res.status(400).json({ success: false, error: 'Invalid signature' });
   }
 });
 
