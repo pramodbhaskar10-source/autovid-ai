@@ -12,7 +12,7 @@
     "replicate": "^0.25.2",
     "openai": "^4.28.0",
     "cloudinary": "^2.0.0",
-    "form-data": "^4.0.0"
+    "stripe": "^14.0.0"
   },
   "engines": {
     "node": ">=18.0.0"
