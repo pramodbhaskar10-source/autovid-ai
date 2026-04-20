@@ -8,10 +8,40 @@ const { exec } = require('child_process');
 const fs = require('fs').promises;
 const path = require('path');
 const Razorpay = require('razorpay');
+const crypto = require('crypto');
 
 const app = express();
-app.use(cors());
+
+// ===== CORS CONFIG - AUTOVID-PRO-BULLETPROOF-V1 =====
+const allowedOrigins = [
+  'https://www.autovidpro.in',
+  'https://autovidpro.in',
+  'https://autovid-ai-frontend.vercel.app',
+  'http://localhost:3000',
+  'http://localhost:5173'
+];
+
+app.use(cors({
+  origin: function (origin, callback) {
+    // Allow requests with no origin like Postman/curl/server-to-server
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    } else {
+      console.log('Blocked by CORS:', origin);
+      return callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true
+}));
+// ===== END CORS =====
+
 app.use(express.json({ limit: '50mb' }));
+
+// ===== HEALTH CHECK FOR VERCEL TEST =====
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', service: 'autovid-ai-backend', time: new Date().toISOString() });
+});
 
 // ===== CONFIG =====
 const PORT = process.env.PORT || 10000;
@@ -263,6 +293,7 @@ app.get('/', (req, res) => {
 app.get('/api', (req, res) => {
   res.json({
     endpoints: {
+      'GET /health': 'Health check',
       'POST /api/generate-pro': 'Generate video (requires x-api-key)',
       'GET /api/status/:jobId': 'Check job status',
       'POST /api/create-order': 'Create Razorpay order',
@@ -312,12 +343,11 @@ app.post('/api/create-order', async (req, res) => {
 
 app.post('/api/verify-payment', async (req, res) => {
   const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
-  const crypto = require('crypto');
   const sign = razorpay_order_id + '|' + razorpay_payment_id;
   const expectedSign = crypto
-   .createHmac('sha256', RAZORPAY_KEY_SECRET)
-   .update(sign.toString())
-   .digest('hex');
+  .createHmac('sha256', RAZORPAY_KEY_SECRET)
+  .update(sign.toString())
+  .digest('hex');
 
   if (razorpay_signature === expectedSign) {
     // Payment verified - activate user here
