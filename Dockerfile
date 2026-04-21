@@ -1,10 +1,26 @@
-FROM python:3.10-slim
+# Use Node 18 with Debian base - includes apt-get
+FROM node:18-bullseye
 
+# Install FFmpeg + fonts for subtitles + cleanup
+RUN apt-get update && \
+    apt-get install -y ffmpeg fonts-dejavu-core && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Set working directory
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy package files first - better caching
+COPY package*.json ./
 
+# Install Node dependencies
+RUN npm install --production
+
+# Copy rest of code
 COPY . .
 
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+# Expose port - Render auto-sets PORT env var
+EXPOSE 10000
+
+# Start command
+CMD ["node", "server.js"]
