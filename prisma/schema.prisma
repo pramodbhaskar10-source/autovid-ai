@@ -1,0 +1,71 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url = env("DATABASE_URL")
+}
+
+model User {
+  id String @id @default(cuid())
+  email String @unique
+  name String?
+  plan String @default("free") // free | pro | cancelled
+  credits Int @default(3)
+  razorpayCustId String? @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  subscriptions Subscription[]
+  socialTokens SocialToken[]
+  jobs Job[]
+}
+
+model Subscription {
+  id String @id @default(cuid())
+  userId String
+  razorpaySubId String @unique
+  razorpayPlanId String
+  status String // active | cancelled | halted | completed
+  currentStart DateTime?
+  currentEnd DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model SocialToken {
+  id String @id @default(cuid())
+  userId String
+  platform String // youtube | instagram | tiktok
+  accessToken String @db.Text
+  refreshToken String? @db.Text
+  expiresAt DateTime?
+  channelId String?
+  channelName String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([userId, platform])
+}
+
+model Job {
+  id String @id @default(cuid())
+  userId String?
+  status String // queued | processing | done | failed
+  topic String
+  style String
+  voice String
+  aspectRatio String
+  duration String
+  brandName String?
+  outputUrl String?
+  errorMsg String? @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
