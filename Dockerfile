@@ -10,14 +10,11 @@ RUN apt-get update && \
 # Set working directory
 WORKDIR /app
 
-# Copy package files first - better caching
-COPY package*.json ./
-
-# Install Node dependencies
-RUN npm install --production
-
-# Copy rest of code
+# Copy ALL code first - so prisma schema exists for postinstall
 COPY . .
+
+# Install Node dependencies - postinstall will find schema.prisma now
+RUN npm install --production
 
 # Expose port - Render auto-sets PORT env var
 EXPOSE 10000
