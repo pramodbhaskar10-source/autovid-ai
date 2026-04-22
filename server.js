@@ -8,9 +8,12 @@ const { exec } = require('child_process');
 const fs = require('fs').promises;
 const path = require('path');
 const Razorpay = require('razorpay');
-const crypto = require('crypto');
+const crypto = require('node:crypto');
 
 const app = express();
+
+const webhookRoutes = require('./routes/webhook');
+app.use('/api', webhookRoutes);
 
 // ===== CORS CONFIG - AUTOVID-PRO-BULLETPROOF-V1 =====
 const allowedOrigins = [
