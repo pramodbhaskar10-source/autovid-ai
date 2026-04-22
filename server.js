@@ -9,11 +9,15 @@ const fs = require('fs').promises;
 const path = require('path');
 const Razorpay = require('razorpay');
 const crypto = require('node:crypto');
+const { PrismaClient } = require('@prisma/client');
 
 const app = express();
+const prisma = new PrismaClient();
 
+// ===== WEBHOOK ROUTE - MUST BE BEFORE express.json() FOR RAW BODY =====
 const webhookRoutes = require('./routes/webhook');
 app.use('/api', webhookRoutes);
+app.use('/razorpay/webhook', webhookRoutes); // Support both paths
 
 // ===== CORS CONFIG - AUTOVID-PRO-BULLETPROOF-V1 =====
 const allowedOrigins = [
@@ -224,7 +228,7 @@ function stitchVideoPro(images, audio, srt, output, width, height, brand) {
 
 // ===== MAIN GENERATOR =====
 async function generateVideoPro(params, jobId) {
-  const { topic, style, voice, aspectRatio, duration, brandName } = params;
+  const { topic, style, voice, aspectRatio, duration, brandName, email } = params;
   const jobWorkDir = path.join('/tmp', 'autovid', jobId);
   await ensureDir(jobWorkDir);
 
@@ -232,6 +236,14 @@ async function generateVideoPro(params, jobId) {
   JOBS.set(jobId, job);
 
   try {
+    // Check user credits before starting
+    if (email) {
+      const user = await prisma.user.findUnique({ where: { email } });
+      if (user && user.plan === 'free' && user.credits <= 0) {
+        throw new Error('No credits remaining. Please upgrade to Pro.');
+      }
+    }
+
     job.progress = 10;
     JOBS.set(jobId, {...job});
     const scenes = await generateScenes(topic, duration.replace('min', ''), style, jobId);
@@ -277,6 +289,17 @@ async function generateVideoPro(params, jobId) {
       public_id: `${jobId}_${style.replace(/\s+/g, '_')}`
     });
 
+    // Deduct credit for free users after successful generation
+    if (email) {
+      const user = await prisma.user.findUnique({ where: { email } });
+      if (user && user.plan === 'free') {
+        await prisma.user.update({
+          where: { email },
+          data: { credits: Math.max(0, user.credits - 1) }
+        });
+      }
+    }
+
     job = {...job, status: 'completed', progress: 100, videoUrl: upload.secure_url };
     JOBS.set(jobId, job);
     console.log(`[${jobId}] COMPLETED: ${upload.secure_url}`);
@@ -290,7 +313,7 @@ async function generateVideoPro(params, jobId) {
 
 // ===== ROUTES =====
 app.get('/', (req, res) => {
-  res.json({ status: 'AutoVid AI Pro Backend v1.0 - Razorpay', docs: '/api' });
+  res.json({ status: 'AutoVid AI Pro Backend v1.0 - Razorpay + Prisma', docs: '/api' });
 });
 
 app.get('/api', (req, res) => {
@@ -301,13 +324,52 @@ app.get('/api', (req, res) => {
       'GET /api/status/:jobId': 'Check job status',
       'POST /api/create-order': 'Create Razorpay order',
       'POST /api/verify-payment': 'Verify payment',
-      'GET /api/me': 'Check credits'
+      'POST /create-subscription': 'Create subscription order - NEW',
+      'GET /api/me': 'Check credits',
+      'GET /user/:email': 'Get user plan/credits - NEW'
     }
   });
 });
 
-app.get('/api/me', (req, res) => {
-  res.json({ credits: 10, plan: 'pro', status: 'active' });
+// Get user subscription status - NEW
+app.get('/user/:email', async (req, res) => {
+  const { email } = req.params;
+  
+  try {
+    const user = await prisma.user.findUnique({
+      where: { email: email }
+    });
+    
+    if (!user) {
+      return res.json({ plan: 'free', credits: 10 }); // Default free credits
+    }
+    
+    res.json({ 
+      plan: user.plan,
+      credits: user.credits,
+      email: user.email
+    });
+  } catch (err) {
+    console.error('DB error:', err);
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
+app.get('/api/me', async (req, res) => {
+  const email = req.query.email;
+  if (!email) {
+    return res.json({ credits: 10, plan: 'free', status: 'active' });
+  }
+  
+  try {
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      return res.json({ credits: 10, plan: 'free', status: 'active' });
+    }
+    res.json({ credits: user.credits, plan: user.plan, status: 'active' });
+  } catch (err) {
+    res.json({ credits: 10, plan: 'free', status: 'active' });
+  }
 });
 
 app.post('/api/generate-pro', async (req, res) => {
@@ -324,10 +386,41 @@ app.get('/api/status/:jobId', (req, res) => {
 });
 
 // ===== RAZORPAY ROUTES =====
+// Create subscription order - NEW for frontend
+app.post('/create-subscription', async (req, res) => {
+  const { amount } = req.body;
+  
+  if (!amount) {
+    return res.status(400).json({ error: 'Amount is required' });
+  }
+
+  const options = {
+    amount: amount * 100, // Razorpay uses paise
+    currency: "INR",
+    receipt: "receipt_" + Date.now(),
+    payment_capture: 1,
+    notes: { plan: 'pro_monthly' }
+  };
+  
+  try {
+    const order = await razorpay.orders.create(options);
+    console.log('Order created:', order.id);
+    res.json({ 
+      orderId: order.id, 
+      amount: order.amount, 
+      currency: order.currency,
+      key: RAZORPAY_KEY_ID
+    });
+  } catch (err) {
+    console.error('Razorpay order error:', err);
+    res.status(500).json({ error: 'Error creating order' });
+  }
+});
+
 app.post('/api/create-order', async (req, res) => {
   try {
     const options = {
-      amount: 240000, // ₹2400 in paise = ₹2400
+      amount: 240000, // ₹2400 in paise
       currency: 'INR',
       receipt: 'rcpt_' + Date.now(),
       notes: { plan: 'pro_monthly' }
@@ -348,12 +441,12 @@ app.post('/api/verify-payment', async (req, res) => {
   const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
   const sign = razorpay_order_id + '|' + razorpay_payment_id;
   const expectedSign = crypto
-  .createHmac('sha256', RAZORPAY_KEY_SECRET)
-  .update(sign.toString())
-  .digest('hex');
+ .createHmac('sha256', RAZORPAY_KEY_SECRET)
+ .update(sign.toString())
+ .digest('hex');
 
   if (razorpay_signature === expectedSign) {
-    // Payment verified - activate user here
+    // Payment verified - webhook will handle user upgrade
     res.json({ success: true, message: 'Payment verified' });
   } else {
     res.status(400).json({ success: false, error: 'Invalid signature' });
