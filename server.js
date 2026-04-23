@@ -453,6 +453,6 @@ app.post('/api/verify-payment', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`AutoVid AI Pro Backend v1.0 running on port ${PORT}`);
 });
